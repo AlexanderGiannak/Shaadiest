@@ -130,18 +130,27 @@ export function sampleShade(a, b, shapes, covered = false) {
 }
 export function scoreGraph(data, date) {
   const shapes = shadowShapes(data, date);
+  const bounds = polygon => polygon.reduce((box, p) => [
+    Math.min(box[0], p[0]), Math.min(box[1], p[1]),
+    Math.max(box[2], p[0]), Math.max(box[3], p[1]),
+  ], [Infinity, Infinity, -Infinity, -Infinity]);
+  const indexed = Object.fromEntries(["polygons", "treeShadows", "woods"].map(key =>
+    [key, shapes[key].map(polygon => ({polygon, box: bounds(polygon)}))]));
   return {
     shapes,
-    edges: data.edges.map((e) => ({
-      ...e,
-      length: distance(data.nodes[e.a].point, data.nodes[e.b].point),
-      shade: sampleShade(
-        data.nodes[e.a].point,
-        data.nodes[e.b].point,
-        shapes,
-        e.covered,
-      ),
-    })),
+    edges: data.edges.map(e => {
+      const a = data.nodes[e.a].point, b = data.nodes[e.b].point;
+      const box = bounds([a, b]);
+      // Reject distant shapes before the detailed five-meter sampling.
+      const nearby = shapes.night || e.covered ? shapes : {
+        ...shapes,
+        ...Object.fromEntries(Object.entries(indexed).map(([key, entries]) => [key,
+          entries.filter(({box: other}) => other[0] <= box[2] && other[2] >= box[0] &&
+            other[1] <= box[3] && other[3] >= box[1]).map(entry => entry.polygon),
+        ])),
+      };
+      return {...e, length: distance(a, b), shade: sampleShade(a, b, nearby, e.covered)};
+    }),
   };
 }
 // Binary heap keeps Dijkstra responsive on real neighborhood networks.
@@ -278,6 +287,8 @@ export function walkable(t = {}) {
   );
 }
 export function parseOSM(raw, center) {
+  // Overpass uses lon; Leaflet and our internal coordinates use lng.
+  const projectOSM = (p) => project({ lat: p.lat, lng: p.lon }, center);
   const nodes = [],
     edges = [],
     buildings = [],
@@ -293,7 +304,7 @@ export function parseOSM(raw, center) {
     if (!n) return null;
     const i = nodes.length;
     lookup.set(id, i);
-    nodes.push({ point: project(n, center), name: n.tags?.name });
+    nodes.push({ point: projectOSM(n), name: n.tags?.name });
     return i;
   };
   for (const el of raw.elements) {
@@ -304,7 +315,7 @@ export function parseOSM(raw, center) {
         Math.min(15, (parseFloat(t["diameter_crown"]) || 8) / 2),
       );
       trees.push({
-        point: project(el, center),
+        point: projectOSM(el),
         radius,
         height: Math.max(3, Math.min(50, parseFloat(t.height) || 10)),
       });
@@ -335,7 +346,7 @@ export function parseOSM(raw, center) {
     const geometry =
       el.geometry || el.nodes?.map((id) => rawNodes.get(id)).filter(Boolean);
     if (!geometry || geometry.length < 3) continue;
-    const points = geometry.map((p) => project(p, center));
+    const points = geometry.map(projectOSM);
     if (t.building && t.building !== "no")
       buildings.push({
         points,

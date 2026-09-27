@@ -85,13 +85,13 @@ test("OSM parsing builds shared-node graph and shade geometry", () => {
   const center = { lat: 25, lng: -80 };
   const raw = {
     elements: [
-      { type: "node", id: 1, lat: 25, lng: -80 },
-      { type: "node", id: 2, lat: 25.001, lng: -80 },
+      { type: "node", id: 1, lat: 25, lon: -80 },
+      { type: "node", id: 2, lat: 25.001, lon: -80 },
       {
         type: "node",
         id: 3,
         lat: 25.001,
-        lng: -80.001,
+        lon: -80.001,
         tags: { natural: "tree" },
       },
       { type: "way", id: 4, nodes: [1, 2], tags: { highway: "footway" } },
@@ -110,7 +110,19 @@ test("OSM parsing builds shared-node graph and shade geometry", () => {
   assert.equal(d.buildings[0].height, 12);
   assert.equal(d.trees[0].radius, 4);
   const s = scoreGraph(d, date);
-  assert.ok(shortestPath(d.nodes, s.edges, 0, 2));
+  const route = shortestPath(d.nodes, s.edges, 0, 2);
+  assert.ok(route);
+  assert.ok(d.nodes.every(n => n.point.every(Number.isFinite)));
+  assert.ok(d.buildings.every(b => b.points.every(p => p.every(Number.isFinite))));
+  assert.ok(d.trees.every(t => t.point.every(Number.isFinite)));
+  assert.ok(d.nodes[2].point[0] < -90);
+  assert.ok(s.edges.every(e => Number.isFinite(e.length) && e.length > 0));
+  const withGeometry = structuredClone(raw);
+  withGeometry.elements.find(e => e.id === 6).geometry = [
+    {lat: 25, lon: -80}, {lat: 25.001, lon: -80},
+    {lat: 25.001, lon: -80.001}, {lat: 25, lon: -80},
+  ];
+  assert.deepEqual(parseOSM(withGeometry, center).buildings, d.buildings);
 });
 test("local projection round trips accurately", () => {
   const o = { lat: 25, lng: -80 },
@@ -224,4 +236,14 @@ test("building wall sweeps preserve an unshaded concave notch", () => {
   const s = shadowShapes(d, new Date("2026-09-26T13:00:00-04:00"));
   assert.ok(!s.polygons.some((p) => inside([70, 70], p)));
   assert.ok(s.polygons.some((p) => inside([10, 10], p)));
+});
+
+test("nearby-shape filtering preserves full shade sampling", () => {
+  const data = demoData();
+  for (const hour of [9, 13, 17]) {
+    const scored = scoreGraph(data, new Date('2026-09-26T' + String(hour).padStart(2, '0') + ':00:00-04:00'));
+    for (const edge of scored.edges) {
+      assert.equal(edge.shade, sampleShade(data.nodes[edge.a].point, data.nodes[edge.b].point, scored.shapes, edge.covered));
+    }
+  }
 });

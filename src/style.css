@@ -1331,3 +1331,68 @@ dialog a {
   border-radius: 6px;
   text-align: left;
 }
+
+/* Mobile map with a persistent search bar and an accessible bottom sheet. */
+#sheet-content { display: contents; }
+.sheet-toggle, .mobile-search { display: none; }
+@media (max-width: 800px) {
+  html, body, #app { height: 100%; overflow: hidden; }
+  .header { display: none; }
+  .workspace { position: fixed; inset: 0; display: block; height: 100dvh; min-height: 0; }
+  .map-shell { position: absolute; inset: 0; height: 100%; min-height: 0; width: 100%; }
+  .map-scene { height: 100%; }
+  .mobile-search { display: block; position: absolute; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 600; pointer-events: none; }
+  .mobile-search > * { pointer-events: auto; }
+  .mobile-search #search-box { display: block !important; margin: 0; padding: 12px; background: #fff; border-radius: 20px; box-shadow: 0 3px 18px #18382d26; }
+  .mobile-search #search-form > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .mobile-search .search-row { margin: 0; }
+  .mobile-search input { min-width: 0; font-size: 16px; }
+  .mobile-search .mode-switch { width: 220px; margin: 10px auto 0; background: #fff; box-shadow: 0 2px 12px #18382d20; }
+  .mobile-search #search-results { max-height: 30dvh; overflow-y: auto; }
+  .mobile-search #search-results:empty { display: none; }
+  .sidebar { position: absolute; inset: auto 0 0; z-index: 700; width: 100%; height: calc(84px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 155px); padding: 0; display: flex; flex-direction: column; overflow: hidden; background: #fafbf7; border: 1px solid #dce4d5; border-radius: 24px 24px 0 0; box-shadow: 0 -5px 28px #18382d25; transition: height .22s ease; }
+  .sidebar.sheet-expanded { height: 65dvh; }
+  .sheet-toggle { display: flex; align-items: center; gap: 12px; flex-shrink: 0; position: relative; width: 100%; min-height: 70px; padding: 25px 22px 14px; background: transparent; text-align: left; font-weight: 700; font-size: 16px; touch-action: none; }
+  .sheet-grip { position: absolute; top: 10px; left: calc(50% - 20px); width: 40px; height: 4px; border-radius: 5px; background: #c2ccbf; }
+  .sheet-action { margin-left: auto; color: #52734d; font-size: 13px; }
+  #sheet-content { display: block; overflow-y: auto; overscroll-behavior: contain; padding: 4px 20px calc(24px + env(safe-area-inset-bottom)); min-height: 0; }
+  .sidebar:not(.sheet-expanded) #sheet-content { visibility: hidden; }
+  .sidebar h1 { font-size: 29px; margin: 0; }
+  .sidebar .intro { margin-bottom: 20px; }
+  .sidebar .time-card { position: static; transform: none; width: 100%; margin: 16px 0 22px; padding: 16px; border: 1px solid #dce4d1; border-radius: 16px; box-shadow: none; background: #f0f4e8; }
+  .sidebar .time-controls { flex-wrap: wrap; }
+  .sidebar .time-controls input[type=range] { flex-basis: 100%; }
+  .sidebar .time-head h3 { max-width: 160px; }
+  .sidebar .time-presets { margin-top: 10px; }
+  .sidebar .time-presets button, .sidebar select, .sidebar .pick-label { min-height: 44px; }
+  .sidebar input[type=date], .sidebar select { font-size: 16px; }
+  .sidebar #route-cards { display: block; }
+  .sidebar .route-card { width: 100%; padding: 16px; }
+  .sidebar .route-card-head { font-size: 13px; }
+  .map-top { top: 138px; left: 12px; right: 12px; }
+  .map-top .location-pill { display: none; }
+  .map-top #load-area { pointer-events: auto; min-height: 44px; }
+  .pin-tools { top: auto; bottom: calc(96px + env(safe-area-inset-bottom)); left: 12px; max-width: calc(100% - 80px); transition: bottom .22s ease; }
+  .workspace:has(.sidebar.sheet-expanded) .pin-tools { bottom: calc(min(65dvh, 100dvh - 155px) + 12px); }
+  .pin-tools button { min-height: 44px; }
+  .map-controls { top: auto; bottom: calc(110px + env(safe-area-inset-bottom)); right: 12px; }
+  .map-controls button { width: 44px; height: 44px; }
+  .map-hint { top: 245px; left: 12px; }
+  .map-legend { display: none; }
+  .leaflet-bottom { bottom: calc(86px + env(safe-area-inset-bottom)); }
+  .leaflet-control-zoom { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .sidebar, .pin-tools { transition: none; } }
+
+@media (max-width: 800px) {
+  .map-shell { z-index: 0; }
+  .mobile-status { margin-top: 8px; padding: 10px 14px; border-radius: 12px; background: #fff; box-shadow: 0 2px 12px #18382d20; font-size: 12px; }
+}
+
+/* Pin actions sit beside their corresponding location fields. */
+.place-label { gap: 10px; }
+.place-label .field { flex: 1; min-width: 0; width: auto; }
+.pin-picker { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border-radius: 10px; background: #eef3e7; color: #24583c; }
+.pin-picker:hover { background: #dfead3; }
+.pin-picker[aria-pressed="true"] { background: #24583c; color: #fff; }
+.journey .field-divider { margin-left: 54px; }

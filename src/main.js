@@ -38,17 +38,17 @@ let data = demoData(),
   busy = false,
   showShade = true,
   navigating = false;
-let clockHour = 14,
-  detour = 0.5;
 const today = new Date();
+let clockHour = today.getHours() + today.getMinutes() / 60,
+  detour = 0.5;
 const dateValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 $("#app").innerHTML = `
 <header class="header"><a class="brand" href="/" aria-label="Shaadiest home"><span class="brandmark">${icon("leaf")}</span>shaadiest<span class="branddot">.</span></a><span class="header-note">A cooler way there.</span><div class="header-right"><span class="event">SHELLHACKS ’26</span><button class="text-button" id="about">How it works ${icon("info")}</button></div></header>
 <main class="workspace"><aside class="sidebar"><div class="eyebrow">MADE FOR THE WALK</div><h1>Take the<br/> <em>shady</em> route.</h1><p class="intro">A little more green. A lot less sun.</p>
 <div class="mode-switch" aria-label="Data source"><button id="demo-mode" class="active">Explore demo</button><button id="live-mode">Live map</button></div>
 <div id="search-box" hidden><form id="search-form"><label for="search">Find a neighborhood</label><div class="search-row"><input id="search" placeholder="e.g. FIU, Miami" minlength="3" required/><button class="square" aria-label="Search places">${icon("arrow")}</button></div></form><div id="search-results"></div></div>
-<div class="journey"><div class="journey-line"></div><label class="place-label"><span class="point from"></span><span class="field"><span class="small-label">STARTING FROM</span><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></label><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="field-divider"></div><label class="place-label"><span class="point to"></span><span class="field"><span class="small-label">HEADING TO</span><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></label></div>
-<div class="time-card"><div class="time-head"><div class="sun-disc">${icon("sun")}</div><div><span class="small-label">PLAN WITH THE SUN</span><h3>Shade moves. Your route can too.</h3></div><div class="time-value" id="time-value">2:00 <small>PM</small></div></div><div class="time-controls"><label class="date-wrap"><span class="sr-only">Departure date</span><input id="date" type="date" value="${dateValue}"/></label><input id="time" type="range" min="0" max="23.5" step="0.5" value="14" aria-label="Departure time"/></div><div class="time-foot"><span id="timezone">Demo time · Miami (UTC−04:00)</span><span>12 AM <span class="time-separator">⸱</span> 11:30 PM</span></div><div class="time-presets" aria-label="Time of day"><button data-hour="9">Morning</button><button data-hour="13">Midday</button><button data-hour="17">Evening</button></div><p id="sun-summary" aria-live="polite"></p></div>
+<div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("pin")}</button><span class="field"><span class="small-label">STARTING FROM</span><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="field-divider"></div><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><span class="small-label">HEADING TO</span><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div></div>
+<div class="time-card"><div class="time-head"><div class="sun-disc">${icon("sun")}</div><div><span class="small-label">PLAN WITH THE SUN</span><h3>Shade moves. Your route can too.</h3></div><div class="time-value" id="time-value"></div></div><div class="time-controls"><label class="date-wrap"><span class="sr-only">Departure date</span><input id="date" type="date" value="${dateValue}"/></label><input id="time" type="range" min="0" max="1439" step="1" value="${Math.round(clockHour * 60)}" aria-label="Departure time"/></div><div class="time-foot"><span id="timezone">Demo time · Miami (UTC−04:00)</span><span>12 AM <span class="time-separator">⸱</span> 11:59 PM</span></div><div class="time-presets" aria-label="Time of day"><button id="reset-time" type="button" title="Reset to your current local date and time" aria-label="Reset to current local date and time">Now</button><button data-hour="9">Morning</button><button data-hour="13">Midday</button><button data-hour="17">Evening</button></div><p id="sun-summary" aria-live="polite"></p></div>
 <div class="preference"><div><label for="detour">Room for a cooler walk</label><strong id="detour-label">+50% distance</strong></div><input id="detour" type="range" min="0" max="75" step="5" value="50"/><div class="range-labels"><span>More direct</span><span>More shade</span></div></div>
 <button id="find" class="primary">${icon("leaf")} Find my shady path ${icon("arrow")}</button>
 <div id="status" class="status" role="status" aria-live="polite"></div>
@@ -56,7 +56,7 @@ $("#app").innerHTML = `
 <div class="insight" id="insight"></div><div class="data-note">${icon("info")}<span id="data-note"></span></div>
 <footer class="sidebar-footer"><span>A WALK ON THE BRIGHT SIDE. SORT OF.</span><span>↗</span></footer></aside>
 <section class="map-shell" aria-label="Walking route map"><div id="map"></div><div class="map-top"><span class="location-pill">${icon("pin")}<span id="map-location">Miami · Campus demo</span><span class="live-dot"></span></span><button id="load-area" class="map-button" hidden>Load this area ${icon("arrow")}</button></div>
-<div class="pin-tools"><button id="drop-start">Drop start</button><button id="drop-end">Drop destination</button><button id="cancel-drop" hidden>Cancel</button></div><div class="map-hint" id="map-hint" hidden></div><div class="map-controls"><button id="locate" aria-label="Go to my location" title="Go to my location">${icon("locate")}</button><button id="fit" aria-label="Fit route" title="Fit route">${icon("pin")}</button><button id="layers" aria-label="Toggle shade overlay" aria-pressed="true" title="Toggle shade overlay">${icon("layers")}</button></div>
+<div class="pin-tools"><button id="cancel-drop" hidden>Cancel</button></div><div class="map-hint" id="map-hint" hidden></div><div class="map-controls"><button id="locate" aria-label="Go to my location" title="Go to my location">${icon("locate")}</button><button id="fit" aria-label="Fit route" title="Fit route">${icon("pin")}</button><button id="layers" aria-label="Toggle shade overlay" aria-pressed="true" title="Toggle shade overlay">${icon("layers")}</button></div>
 <div class="map-legend"><span><i class="legend-dot green"></i> Tree canopy</span><span><i class="legend-dot purple"></i> Cast shadow</span><span><i class="legend-line"></i> Shortest route</span></div>
 
 </section></main>
@@ -67,6 +67,62 @@ const mapScene = document.createElement("div");
 mapScene.className = "map-scene";
 while (mapShell.firstChild) mapScene.append(mapShell.firstChild);
 mapShell.append($(".time-card"), mapScene);
+// Move existing controls between layouts so state and event handlers stay shared.
+const mobileLayout = window.matchMedia("(max-width: 800px)");
+const sidebar = $(".sidebar");
+const sheetToggle = document.createElement("button");
+sheetToggle.className = "sheet-toggle";
+sheetToggle.type = "button";
+sheetToggle.setAttribute("aria-controls", "sheet-content");
+const sheetContent = document.createElement("div");
+sheetContent.id = "sheet-content";
+while (sidebar.firstChild) sheetContent.append(sidebar.firstChild);
+sidebar.append(sheetToggle, sheetContent);
+const mobileSearch = document.createElement("div");
+mobileSearch.className = "mobile-search";
+$(".workspace").append(mobileSearch);
+const mobileStatus = document.createElement("div");
+mobileStatus.className = "mobile-status";
+mobileStatus.setAttribute("role", "status");
+mobileStatus.hidden = true;
+mobileSearch.append(mobileStatus);
+const movableControls = [$("#search-box"), $(".mode-switch"), $(".time-card")].map(node => {
+  const anchor = document.createComment("desktop control position");
+  node.before(anchor);
+  return { node, anchor };
+});
+let sheetExpanded = false;
+function setSheetExpanded(expanded) {
+  sheetExpanded = expanded;
+  sidebar.classList.toggle("sheet-expanded", expanded);
+  sheetToggle.setAttribute("aria-expanded", String(expanded));
+  sheetToggle.innerHTML = '<span class="sheet-grip"></span><span>' + (expanded ? 'Your shady walk' : 'Plan your walk') + '</span><span class="sheet-action">' + (expanded ? 'Hide ↓' : 'Open ↑') + '</span>';
+  sheetContent.inert = mobileLayout.matches && !expanded;
+}
+sheetToggle.onclick = () => {
+  if (!sheetDragged) setSheetExpanded(!sheetExpanded);
+  sheetDragged = false;
+};
+let touchStartY;
+let sheetDragged = false;
+sheetToggle.addEventListener("pointerdown", e => { touchStartY = e.clientY; sheetDragged = false; sheetToggle.setPointerCapture(e.pointerId); });
+sheetToggle.addEventListener("pointerup", e => {
+  if (Math.abs(e.clientY - touchStartY) > 25) {
+    sheetDragged = true;
+    setSheetExpanded(e.clientY < touchStartY);
+  }
+});
+function syncMobileLayout() {
+  for (const {node, anchor} of movableControls) {
+    if (mobileLayout.matches) {
+      if (node.classList.contains("time-card")) $(".preference").before(node);
+      else mobileStatus.before(node);
+    } else anchor.after(node);
+  }
+  setSheetExpanded(sheetExpanded);
+}
+mobileLayout.addEventListener("change", syncMobileLayout);
+syncMobileLayout();
 const map = L.map("map", {
   zoomControl: false,
   preferCanvas: true,
@@ -102,16 +158,14 @@ const ll = (p) => {
   return [v.lat, v.lng];
 };
 function setStatus(msg = "", error = false) {
+  mobileStatus.textContent = msg;
+  mobileStatus.hidden = !msg;
   $("#status").textContent = msg;
   $("#status").classList.toggle("error", error);
 }
 function date() {
-  if (data.source === "demo")
-    return new Date(
-      `${$("#date").value}T${String(Math.floor(clockHour)).padStart(2, "0")}:${clockHour % 1 ? "30" : "00"}:00-04:00`,
-    );
   const d = new Date(`${$("#date").value}T00:00:00`);
-  d.setHours(Math.floor(clockHour), clockHour % 1 ? 30 : 0, 0, 0);
+  d.setHours(0, Math.round(clockHour * 60), 0, 0);
   return d;
 }
 function setOptions() {
@@ -302,9 +356,7 @@ function updateNote() {
       ? "Illustrative campus demo · Sample paths and canopy, not navigation data. Switch to Live map for real streets."
       : `OSM estimates · ${data.trees.length} mapped trees · ${data.buildings.length} buildings. Missing features can undercount shade.`;
   $("#timezone").textContent =
-    data.source === "demo"
-      ? "Demo time · fixed UTC−04:00"
-      : `Time zone · ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
+    `Time zone · ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
 }
 function calculate(fit = false) {
   if (!$("#date").value) {
@@ -367,6 +419,7 @@ $("#start").onchange = (e) => {
 };
 $("#end").onchange = (e) => {
   end = Number(e.target.value);
+  setSheetExpanded(true);
   calculate(true);
 };
 $("#swap").onclick = () => {
@@ -384,9 +437,9 @@ $("#detour").oninput = (e) => {
   $("#detour-label").textContent = `+${e.target.value}% distance`;
   calculate();
 };
-function setHour(value) {
+function setHour(value, fit = false) {
   clockHour = Number(value);
-  $("#time").value = clockHour;
+  $("#time").value = Math.round(clockHour * 60);
   document
     .querySelectorAll("[data-hour]")
     .forEach((button) =>
@@ -396,13 +449,22 @@ function setHour(value) {
       ),
     );
   $("#time-value").innerHTML =
-    `${Math.floor(clockHour) % 12 || 12}:${clockHour % 1 ? "30" : "00"} <small>${clockHour >= 12 ? "PM" : "AM"}</small>`;
-  calculate();
+    `${Math.floor(clockHour) % 12 || 12}:${String(Math.round(clockHour * 60) % 60).padStart(2, "0")} <small>${clockHour >= 12 ? "PM" : "AM"}</small>`;
+  calculate(fit);
 }
-$("#time").oninput = (e) => setHour(e.target.value);
+$("#time").oninput = (e) => setHour(Number(e.target.value) / 60);
 document
   .querySelectorAll("[data-hour]")
   .forEach((button) => (button.onclick = () => setHour(button.dataset.hour)));
+$("#reset-time").onclick = () => {
+  const now = new Date();
+  $("#date").value = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  setHour(now.getHours() + now.getMinutes() / 60);
+};
 $("#date").onchange = () => calculate();
 $("#find").onclick = () => {
   if (busy) return;
@@ -413,8 +475,7 @@ $("#find").onclick = () => {
   calculate(true);
   navigating = true;
   renderNavigation();
-  if (window.innerWidth <= 800)
-    $(".map-shell").scrollIntoView({ behavior: "smooth" });
+  if (mobileLayout.matches) $("#navigation").scrollIntoView({ behavior: "smooth", block: "nearest" });
 };
 $("#layers").onclick = () => {
   showShade = !showShade;
@@ -460,6 +521,7 @@ function cancelPick() {
   map.closePopup();
 }
 function choose(which) {
+  if (mobileLayout.matches) setSheetExpanded(false);
   pick = which;
   $("#map-hint").hidden = false;
   $("#cancel-drop").hidden = false;
@@ -505,6 +567,7 @@ function placePin(which, position) {
   setStatus(
     `Pin placed on ${snap.edge.name}${snap.distance >= 1 ? ` · snapped ${Math.round(snap.distance)} m to path` : ""}. Drag either pin to adjust.`,
   );
+  if (which === "end") setSheetExpanded(true);
   if (start !== null && end === null) choose("end");
 }
 $("#pick-start").onclick = () => choose("start");
@@ -638,6 +701,10 @@ $("#search-form").onsubmit = async (e) => {
           .split(",")
           .slice(0, 2)
           .join(",");
+        if (mobileLayout.matches) {
+          modeUI(true);
+          loadArea();
+        }
         setStatus("Place found. Select “Load this area” to get walking paths.");
       };
       $("#search-results").append(b);
@@ -674,4 +741,4 @@ $("#locate").onclick = () => {
 setOptions();
 updateNote();
 drawBase();
-calculate(true);
+setHour(clockHour, true);
