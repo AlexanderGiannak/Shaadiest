@@ -131,6 +131,8 @@ function syncMobileLayout() {
 }
 mobileLayout.addEventListener("change", syncMobileLayout);
 syncMobileLayout();
+// Avoid geometry copies and large unions on memory-constrained mobile web apps.
+const lightweightMap = mobileLayout.matches || window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const map = L.map("map", {
   zoomControl: false,
   preferCanvas: true,
@@ -138,6 +140,8 @@ const map = L.map("map", {
 }).setView([data.origin.lat, data.origin.lng], 17);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
+  keepBuffer: lightweightMap ? 0 : 2,
+  updateWhenIdle: true,
   attribution:
     '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 }).addTo(map);
@@ -213,7 +217,7 @@ function drawBase() {
       interactive: false,
     }).addTo(baseLayer);
   for (const tree of data.trees) {
-    L.polygon(canopyOutline(tree).map(ll), {
+    L.polygon(canopyOutline(tree).filter((_, index) => !lightweightMap || index % 4 === 0).map(ll), {
       pane: "trees",
       color: "#447247",
       weight: 1.2,
@@ -221,7 +225,7 @@ function drawBase() {
       fillOpacity: 0.65,
       interactive: false,
     }).addTo(baseLayer);
-    L.circle(ll(tree.point), {
+    if (!lightweightMap) L.circle(ll(tree.point), {
       pane: "trees",
       radius: 0.8,
       color: "#496140",
@@ -242,10 +246,11 @@ function drawBase() {
 }
 let shadeWorker = null;
 let shadeWorking = false;
+let shadeDeadline;
 let pendingShade = null;
 let shadeFallback = false;
 try {
-  shadeWorker = new Worker(new URL("./shade-worker.js", import.meta.url), { type: "module" });
+  if (!lightweightMap) shadeWorker = new Worker(new URL("./shade-worker.js", import.meta.url), { type: "module" });
 } catch { /* Canvas fallback also works when workers are unavailable. */ }
 let shadeVersion = 0;
 let mergedShade = [];
@@ -265,6 +270,7 @@ function requestShade(request) {
   catch { disableShadeWorker(); }
 }
 function disableShadeWorker() {
+  clearTimeout(shadeDeadline);
   shadeWorker?.terminate();
   shadeWorker = null;
   shadeWorking = false;
@@ -273,6 +279,7 @@ function disableShadeWorker() {
 }
 if (shadeWorker) {
   shadeWorker.onmessage = ({ data: result }) => {
+    clearTimeout(shadeDeadline);
     shadeWorking = false;
     if (result.version === shadeVersion) {
       if (result.error) fallbackShade();
@@ -1010,7 +1017,20 @@ $("#use-current-start").onclick = async () => {
   }
 };
 setInterval(() => { if (locationWatch !== null && latestFix) updateWalkingStatus(); },5000);
-window.addEventListener("pagehide", () => stopTracking());
+function suspendMapWork() {
+  stopTracking();
+  clearTimeout(calculationTimer);
+  clearTimeout(shadeDeadline);
+  shadeWorker?.terminate();
+  shadeWorker = null;
+  shadeWorking = false;
+  pendingShade = null;
+}
+window.addEventListener("pagehide", suspendMapWork);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) suspendMapWork();
+  else if (scored && !scored.shapes.night && !mergedShade.length) fallbackShade();
+});
 
 setOptions();
 updateNote();

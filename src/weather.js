@@ -37,6 +37,7 @@ export function mountWeather(map, root, getDeparture = () => new Date()) {
   let controller, timer, revision = 0;
   const cache = new Map();
   async function refresh() {
+    if (document.hidden) return;
     const version = ++revision;
     controller?.abort();
     controller = new AbortController();
