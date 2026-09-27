@@ -1,4 +1,4 @@
-import { campusCenter, campusPlaces, searchCampus } from "./campus.js";
+import { campusCenter, campusPlaces, searchCampus, snapCampusPlace } from "./campus.js";
 import { walkingProgress } from "./walking.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -19,6 +19,7 @@ const icons = {
   pin: '<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
   arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>',
+  origin: '<circle cx="12" cy="12" r="7"/>',
   swap: '<path d="M8 3v18m-4-4 4 4 4-4M16 21V3m-4 4 4-4 4 4"/>',
   locate:
     '<circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3"/>',
@@ -47,7 +48,7 @@ $("#app").innerHTML = `
 <header class="header"><a class="brand" href="/" aria-label="Shaadiest home"><span class="brandmark">${icon("leaf")}</span>shaadiest<span class="branddot">.</span></a><span class="header-note">A cooler way there.</span><div class="header-right"><span class="event">SHELLHACKS ’26</span><button class="text-button" id="about">How it works ${icon("info")}</button></div></header>
 <main class="workspace"><aside class="sidebar"><div class="eyebrow">MADE FOR THE WALK</div><h1>Take the<br/> <em>shady</em> route.</h1><p class="intro">A little more green. A lot less sun.</p>
 <div class="mode-switch" aria-label="Data source"><button id="demo-mode" class="active">Explore demo</button><button id="live-mode">Live map</button></div>
-<p class="campus-scope">Search FIU · Modesto A. Maidique campus</p><div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("pin")}</button><span class="field"><span class="small-label">STARTING FROM</span><input id="search-start" class="endpoint-search" type="search" autocomplete="off" aria-label="Search FIU starting point" placeholder="Search FIU starting point" aria-controls="results-start"/><div id="results-start" class="endpoint-results" aria-live="polite"></div><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button><button id="use-current-start" class="current-start" type="button">Use current location</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="field-divider"></div><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><span class="small-label">HEADING TO</span><input id="search-end" class="endpoint-search" type="search" autocomplete="off" aria-label="Search FIU destination" placeholder="Search FIU destination" aria-controls="results-end"/><div id="results-end" class="endpoint-results" aria-live="polite"></div><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div></div>
+<p class="campus-scope">Search FIU · Modesto A. Maidique campus</p><div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("origin")}</button><span class="field"><input id="search-start" class="endpoint-search" type="search" autocomplete="off" aria-label="Search starting point" placeholder="Search starting point" aria-controls="results-start"/><div id="results-start" class="endpoint-results" aria-live="polite"></div><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-end" class="endpoint-search" type="search" autocomplete="off" aria-label="Search destination" placeholder="Search destination" aria-controls="results-end"/><div id="results-end" class="endpoint-results" aria-live="polite"></div><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div></div><button id="use-current-start" class="current-start" type="button">Use current location</button>
 <div class="time-card"><div class="time-head"><div class="sun-disc">${icon("sun")}</div><div><span class="small-label">PLAN WITH THE SUN</span><h3>Shade moves. Your route can too.</h3></div><div class="time-value" id="time-value"></div></div><div class="time-controls"><label class="date-wrap"><span class="sr-only">Departure date</span><input id="date" type="date" value="${dateValue}"/></label><input id="time" type="range" min="0" max="1439" step="1" value="${Math.round(clockHour * 60)}" aria-label="Departure time"/></div><div class="time-foot"><span id="timezone">Demo time · Miami (UTC−04:00)</span><span>12 AM <span class="time-separator">⸱</span> 11:59 PM</span></div><div class="time-presets" aria-label="Time of day"><button id="reset-time" type="button" title="Reset to your current local date and time" aria-label="Reset to current local date and time">Now</button><button data-hour="9">Morning</button><button data-hour="13">Midday</button><button data-hour="17">Evening</button></div><p id="sun-summary" aria-live="polite"></p></div>
 <div class="preference"><div><label for="detour">Room for a cooler walk</label><strong id="detour-label">+50% distance</strong></div><input id="detour" type="range" min="0" max="75" step="5" value="50"/><div class="range-labels"><span>More direct</span><span>More shade</span></div></div>
 <button id="find" class="primary">${icon("leaf")} Find my shady path ${icon("arrow")}</button>
@@ -180,7 +181,7 @@ function setOptions() {
     }
     sel.value = which === "start" ? start : end;
     sel.hidden = true;
-    $("#pick-" + which).hidden = data.source === "demo";
+    $("#pick-" + which).hidden = true;
   }
 }
 function drawBase() {
@@ -551,12 +552,12 @@ function choose(which) {
   $("#drop-end").setAttribute("aria-pressed", which === "end");
   map.getContainer().style.cursor = "crosshair";
 }
-function placePin(which, position) {
+function placePin(which, position, resolvedSnap = null) {
   if (busy) {
     drawPins();
     return;
   }
-  const snap = snapToPath(data, project(position, data.origin));
+  const snap = resolvedSnap || snapToPath(data, project(position, data.origin));
   if (!snap) {
     setStatus(
       "No walking path within 80 m. Move closer to a mapped path.",
@@ -735,9 +736,9 @@ for (const which of ["start", "end"]) {
         button.textContent = place.name;
         button.onclick = () => {
           if (busy) return;
-          const snapped = snapToPath(data, project(place,data.origin));
-          if (!snapped) { setStatus("No outdoor walking path near this place. Choose a nearby entrance on the map.",true); return; }
-          if (!placePin(which,place)) return;
+          const snapped = snapCampusPlace(data, place);
+          if (!snapped) { setStatus("Could not connect this place to a mapped walking path. Choose a nearby entrance on the map.",true); return; }
+          if (!placePin(which,place,snapped)) return;
           input.value = place.name;
           results.replaceChildren();
           map.panTo(unproject(data.nodes[which === "start" ? start : end].point,data.origin));

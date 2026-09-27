@@ -1,3 +1,5 @@
+import { project, snapToPath } from "./engine.js";
+
 export const campusCenter = { lat: 25.756, lng: -80.374 };
 // Initial search window: FIU Modesto A. Maidique campus, Miami.
 export function inCampus(lat, lng) {
@@ -17,7 +19,8 @@ export function campusPlaces(raw) {
     const key = tags.name.toLowerCase();
     if (seen.has(key)) return [];
     seen.add(key);
-    return [{name:tags.name, aliases:[tags.short_name,tags.alt_name,tags.ref].filter(Boolean).join(" "), ...point}];
+    const boundaries = e.geometry ? [e.geometry] : (e.members || []).filter(m => m.role !== "inner").map(m => m.geometry || []);
+    return [{boundaries, name:tags.name, aliases:[tags.short_name,tags.alt_name,tags.ref].filter(Boolean).join(" "), ...point}];
   });
 }
 export function searchCampus(places, query) {
@@ -25,4 +28,31 @@ export function searchCampus(places, query) {
   const words = normalize(query).trim().split(/\s+/).filter(Boolean);
   return words.length ? places.filter(p => inCampus(p.lat,p.lng) && words.every(w=>normalize(p.name+" "+p.aliases).includes(w)))
     .sort((a,b)=>a.name.localeCompare(b.name)).slice(0,8) : [];
+}
+
+// Large places are searchable by their mapped perimeter as well as their center.
+// Keep separate relation members separate so gaps never become invented edges.
+export function snapCampusPlace(data, place) {
+  const center = snapToPath(data, project(place, data.origin));
+  if (center) return center;
+  let best = null;
+  const consider = point => {
+    const snap = snapToPath(data, point);
+    if (snap && (!best || snap.distance < best.distance)) best = snap;
+  };
+  for (const boundary of place.boundaries || []) {
+    const points = boundary.map(p => project({lat:p.lat, lng:p.lon}, data.origin));
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i];
+      consider(a);
+      if (!i) continue;
+      const b = points[i - 1];
+      const steps = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 20);
+      for (let step = 1; step < steps; step++) {
+        const t = step / steps;
+        consider([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]);
+      }
+    }
+  }
+  return best;
 }

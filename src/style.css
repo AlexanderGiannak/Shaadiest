@@ -178,17 +178,25 @@ h1 em {
   font-weight: 650;
 }
 .journey {
-  border: 1px solid #dee3d8;
-  border-radius: 12px;
   position: relative;
-  background: #fff;
-  padding: 4px 14px;
+  display: grid;
+  gap: 12px;
+  padding: 0 42px 0 0;
+}
+.journey::before {
+  content: "";
+  position: absolute;
+  left: 15px;
+  top: 37px;
+  height: 34px;
+  border-left: 3px dotted #9aa69b;
+  pointer-events: none;
 }
 .place-label {
   display: flex;
   gap: 13px;
   align-items: center;
-  min-height: 67px;
+  min-height: 44px;
 }
 .point {
   width: 9px;
@@ -242,18 +250,29 @@ h1 em {
   margin-left: 23px;
 }
 .swap {
+  display: grid;
+  place-items: center;
   position: absolute;
-  right: 10px;
-  top: 53px;
-  z-index: 2;
-  background: #fff;
-  border: 1px solid #e4e8de;
-  border-radius: 50%;
-  height: 31px;
-  width: 31px;
+  right: -4px;
+  top: 32px;
+  padding: 0;
+  background: transparent;
+  color: #294535;
+  border: 0;
+  border-radius: 8px;
+  height: 44px;
+  width: 40px;
+}
+.swap:hover {
+  background: #eef3e7;
+}
+.swap:focus-visible {
+  outline: 2px solid #24583c;
+  outline-offset: 3px;
 }
 .swap svg {
-  width: 15px;
+  width: 24px;
+  height: 24px;
 }
 .preference {
   margin: 22px 0;
@@ -1389,13 +1408,14 @@ dialog a {
   .mobile-status { margin-top: 8px; padding: 10px 14px; border-radius: 12px; background: #fff; box-shadow: 0 2px 12px #18382d20; font-size: 12px; }
 }
 
-/* Pin actions sit beside their corresponding location fields. */
-.place-label { gap: 10px; }
-.place-label .field { flex: 1; min-width: 0; width: auto; }
-.pin-picker { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border-radius: 10px; background: #eef3e7; color: #24583c; }
-.pin-picker:hover { background: #dfead3; }
-.pin-picker[aria-pressed="true"] { background: #24583c; color: #fff; }
-.journey .field-divider { margin-left: 54px; }
+/* Compact route markers stay aligned with the inputs as results open. */
+.place-label { gap: 8px; align-items: flex-start; }
+.place-label .field { position: relative; flex: 1; min-width: 0; width: auto; }
+.pin-picker { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 48px; padding: 0; border-radius: 8px; background: transparent; color: #52634f; }
+.pin-picker svg { width: 23px; height: 23px; }
+#drop-end { color: #24583c; }
+.pin-picker:hover { background: #e8eee3; }
+.pin-picker[aria-pressed="true"] { color: #087f8c; }
 
 .walking-status { margin: 12px 0; padding: 12px 14px; border-radius: 12px; background: #eaf3ff; color: #17477d; font-size: 13px; line-height: 1.5; }
 .map-controls #locate[aria-pressed="true"] { background: #2877df; color: white; }
@@ -1404,7 +1424,11 @@ dialog a {
 .current-start:disabled { opacity: .6; cursor: wait; }
 
 .campus-scope { font-size: 12px; color: #52634f; margin: 12px 0; }
-.endpoint-search { width: 100%; min-width: 0; min-height: 44px; border: 1px solid #d5dfd1; border-radius: 8px; padding: 8px; background: white; font: inherit; font-size: 16px; }
-.endpoint-results { font-size: 12px; color: #52634f; }
-.endpoint-results button { display: block; width: 100%; padding: 12px 8px; text-align: left; background: #f0f5ed; border-bottom: 1px solid #d5dfd1; }
-.endpoint-results button:hover, .endpoint-results button:focus-visible { background: #ddebd5; }
+.endpoint-search { width: 100%; min-width: 0; height: 48px; border: 1px solid #a8b1a6; border-radius: 9px; padding: 0 12px; background: #fff; color: #243b2d; font: inherit; font-size: 16px; text-overflow: ellipsis; transition: border-color .15s, box-shadow .15s; }
+.endpoint-search::placeholder { color: #717a70; opacity: 1; }
+.endpoint-search:focus { outline: none; border-color: #087f8c; box-shadow: 0 0 0 1px #087f8c; }
+.endpoint-results { position: absolute; top: calc(100% + 5px); left: 0; right: 0; z-index: 20; max-height: 240px; overflow-y: auto; border-radius: 9px; background: #fff; box-shadow: 0 6px 20px #18382d20; font-size: 13px; color: #52634f; }
+.endpoint-results:empty { display: none; }
+.endpoint-results:not(:empty) { border: 1px solid #d5dfd1; padding: 4px; }
+.endpoint-results button { display: block; width: 100%; min-height: 44px; padding: 10px; border-radius: 5px; text-align: left; background: #fff; }
+.endpoint-results button:hover, .endpoint-results button:focus-visible { background: #eef3e7; }
