@@ -55,3 +55,17 @@ test("same-name places at different locations remain searchable", () => {
   ]});
   assert.equal(searchPlaces(places, "coffee").length, 2);
 });
+
+test("food search includes restaurant names, brands, cuisine, cafes, and relation places",()=>{
+  const places = areaPlaces({elements:[
+    {type:"node",lat:25.75,lon:-80.37,tags:{name:"Little Havana",amenity:"restaurant",cuisine:"cuban;sandwich", "addr:street":"Main Street"}},
+    {type:"node",lat:25.751,lon:-80.37,tags:{brand:"Subway",amenity:"fast_food"}},
+    {type:"relation",tags:{name:"Morning Cup",amenity:"cafe"},members:[{role:"outer",geometry:[{lat:25.75,lon:-80.37},{lat:25.751,lon:-80.371}]}]},
+  ]});
+  assert.equal(searchPlaces(places,"little havana")[0].category,"Restaurant");
+  assert.equal(searchPlaces(places,"cuban")[0].name,"Little Havana");
+  assert.equal(searchPlaces(places,"subway")[0].name,"Subway");
+  assert.equal(searchPlaces(places,"cafe")[0].name,"Morning Cup");
+  assert.equal(searchPlaces(places,"restaurants").length,0);
+  assert.equal(searchPlaces(places,"restaurant").length,2);
+});

@@ -49,3 +49,15 @@ test("a timed out provider yields to the next provider", async () => {
   try { assert.deepEqual(await load(25,-80,2),data); }
   finally { clearInterval(keepAlive); }
 });
+
+test("five-mile loading range converts miles to geographic bounds", async () => {
+  let query;
+  const load = createAreaLoader({hosts:["one"],fetchImpl:async (host,options)=>{
+    query = options.body.get("data");
+    return ok();
+  }});
+  await load(25,-80,5);
+  const bounds = query.match(/\((-?[\d.]+),(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)\)/).slice(1).map(Number);
+  assert.ok(Math.abs((bounds[2]-25)*111.32 - 8.04672) < 1e-8);
+  assert.ok(Math.abs((bounds[3]+80)*111.32*Math.cos(25*Math.PI/180) - 8.04672) < 1e-8);
+});

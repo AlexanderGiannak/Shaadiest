@@ -1,3 +1,5 @@
+import { formatDistance } from "./units.js";
+import { arrivalTime, mountWeather } from "./weather.js";
 import { areaPlaces, searchPlaces, snapPlace } from "./campus.js";
 import { walkingProgress } from "./walking.js";
 import L from "leaflet";
@@ -48,7 +50,7 @@ $("#app").innerHTML = `
 <header class="header"><a class="brand" href="/" aria-label="Shaadiest home"><span class="brandmark">${icon("leaf")}</span>shaadiest<span class="branddot">.</span></a><span class="header-note">A cooler way there.</span><div class="header-right"><span class="event">SHELLHACKS ’26</span><button class="text-button" id="about">How it works ${icon("info")}</button></div></header>
 <main class="workspace"><aside class="sidebar"><div class="eyebrow">MADE FOR THE WALK</div><h1>Take the<br/> <em>shady</em> route.</h1><p class="intro">A little more green. A lot less sun.</p>
 <div class="mode-switch" aria-label="Data source"><button id="demo-mode" class="active">Explore demo</button><button id="live-mode">Live map</button></div>
-<div class="area-scope"><label for="area-radius">Area around map center</label><select id="area-radius" aria-label="Map loading radius"><option value="1">1 km</option><option value="2" selected>2 km</option><option value="3">3 km</option></select></div><p class="campus-scope">Pan anywhere, then choose Live map or Load this area to search nearby places.</p><div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("origin")}</button><span class="field"><input id="search-start" class="endpoint-search" type="search" autocomplete="off" aria-label="Search starting point" placeholder="Search starting point" aria-controls="results-start"/><div id="results-start" class="endpoint-results" aria-live="polite"></div><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-end" class="endpoint-search" type="search" autocomplete="off" aria-label="Search destination" placeholder="Search destination" aria-controls="results-end"/><div id="results-end" class="endpoint-results" aria-live="polite"></div><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div></div><button id="use-current-start" class="current-start" type="button">Use current location</button>
+<div class="area-scope"><label for="area-radius">Area around map center</label><select id="area-radius" aria-label="Map loading radius"><option value="1">1 mile</option><option value="2" selected>2 miles</option><option value="3">3 miles</option><option value="4">4 miles</option><option value="5">5 miles</option></select></div><p class="campus-scope">Pan anywhere, then choose Live map or Load this area to search restaurants, cafes, shops, and buildings by name.</p><div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("origin")}</button><span class="field"><input id="search-start" class="endpoint-search" type="search" autocomplete="off" aria-label="Search starting point" placeholder="Search starting point" aria-controls="results-start"/><div id="results-start" class="endpoint-results" aria-live="polite"></div><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-end" class="endpoint-search" type="search" autocomplete="off" aria-label="Search destination" placeholder="Search destination" aria-controls="results-end"/><div id="results-end" class="endpoint-results" aria-live="polite"></div><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div></div><button id="use-current-start" class="current-start" type="button">Use current location</button>
 <div class="time-card"><div class="time-head"><div class="sun-disc">${icon("sun")}</div><div><span class="small-label">PLAN WITH THE SUN</span><h3>Shade moves. Your route can too.</h3></div><div class="time-value" id="time-value"></div></div><div class="time-controls"><label class="date-wrap"><span class="sr-only">Departure date</span><input id="date" type="date" value="${dateValue}"/></label><input id="time" type="range" min="0" max="1439" step="1" value="${Math.round(clockHour * 60)}" aria-label="Departure time"/></div><div class="time-foot"><span id="timezone">Demo time · Miami (UTC−04:00)</span><span>12 AM <span class="time-separator">⸱</span> 11:59 PM</span></div><div class="time-presets" aria-label="Time of day"><button id="reset-time" type="button" title="Reset to your current local date and time" aria-label="Reset to current local date and time">Now</button><button data-hour="9">Morning</button><button data-hour="13">Midday</button><button data-hour="17">Evening</button></div><p id="sun-summary" aria-live="polite"></p></div>
 <div class="preference"><div><label for="detour">Room for a cooler walk</label><strong id="detour-label">+50% distance</strong></div><input id="detour" type="range" min="0" max="75" step="5" value="50"/><div class="range-labels"><span>More direct</span><span>More shade</span></div></div>
 <button id="find" class="primary">${icon("leaf")} Find my shady path ${icon("arrow")}</button>
@@ -58,10 +60,10 @@ $("#app").innerHTML = `
 <footer class="sidebar-footer"><span>A WALK ON THE BRIGHT SIDE. SORT OF.</span><span>↗</span></footer></aside>
 <section class="map-shell" aria-label="Walking route map"><div id="map"></div><div class="map-top"><span class="location-pill">${icon("pin")}<span id="map-location">Miami · Campus demo</span><span class="live-dot"></span></span><button id="load-area" class="map-button" hidden>Load this area ${icon("arrow")}</button></div>
 <div class="pin-tools"><button id="cancel-drop" hidden>Cancel</button></div><div class="map-controls"><button id="locate" aria-label="Start location tracking" title="Start location tracking" aria-pressed="false">${icon("locate")}</button><button id="follow-location" hidden aria-label="Follow my location" title="Follow my location">${icon("walk")}</button><button id="fit" aria-label="Fit route" title="Fit route">${icon("pin")}</button><button id="layers" aria-label="Toggle shade overlay" aria-pressed="true" title="Toggle shade overlay">${icon("layers")}</button></div>
-<div class="map-legend"><span><i class="legend-dot green"></i> Tree canopy</span><span><i class="legend-dot purple"></i> Cast shadow</span><span><i class="legend-line"></i> Shortest route</span></div>
+<div class="weather-widget" id="weather-widget"><button class="weather-toggle" aria-label="Check weather and humidity" aria-expanded="false" aria-controls="weather-panel"><span class="weather-symbol" aria-hidden="true">☀</span><span class="weather-summary">Weather</span></button><section class="weather-panel" id="weather-panel" aria-label="Departure weather" hidden><strong>Weather at map center</strong><p class="weather-details" role="status"></p><small>Hourly forecast for your selected departure.</small><div><a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a><button class="weather-refresh">Refresh</button></div></section></div><div class="map-legend"><span><i class="legend-dot green"></i> Tree canopy</span><span><i class="legend-dot purple"></i> Cast shadow</span><span><i class="legend-line"></i> Shortest route</span></div>
 
 </section></main>
-<dialog id="about-dialog"><button class="dialog-close" aria-label="Close explanation">×</button><div class="eyebrow">A LITTLE SCIENCE. A BETTER WALK.</div><h2>Follow the shade.</h2><p>We build a walking network from OpenStreetMap, estimate tree canopy and project building shadows for your departure time. Each path is sampled every 5 meters.</p><p>The shade route minimizes estimated sun-exposed distance among several weighted route candidates, while staying within your detour limit. It is an approximation, not a guaranteed global optimum.</p><h3>What’s an estimate?</h3><p>Missing building heights use 3 meters per floor or a 9-meter default. Unmeasured trees use an 8-meter crown diameter and a 10-meter height. Crown shadows shift and stretch with the sun. Forest areas count as canopy. Building shadows sweep individual walls to preserve footprint notches. Tree crowns use approximate irregular outlines, not measured foliage. Clouds, terrain and changes during the walk are not modeled.</p><p>OSM coverage varies: unmapped trees do not mean no trees. Demo streets, buildings and trees are illustrative. Live routes use mapped public walking access; check signs and crossings on the ground.</p><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap data & contributors ↗</a></dialog>`;
+<dialog id="about-dialog"><button class="dialog-close" aria-label="Close explanation">×</button><div class="eyebrow">A LITTLE SCIENCE. A BETTER WALK.</div><h2>Follow the shade.</h2><p>We build a walking network from OpenStreetMap, estimate tree canopy and project building shadows for your departure time. Each path is sampled about every 16 feet.</p><p>The shade route minimizes estimated sun-exposed distance among several weighted route candidates, while staying within your detour limit. It is an approximation, not a guaranteed global optimum.</p><h3>What’s an estimate?</h3><p>Missing building heights use about 10 feet per floor or a 30-foot default. Unmeasured trees use a 26-foot crown diameter and a 33-foot height. Crown shadows shift and stretch with the sun. Forest areas count as canopy. Building shadows sweep individual walls to preserve footprint notches. Tree crowns use approximate irregular outlines, not measured foliage. Clouds, terrain and changes during the walk are not modeled.</p><p>OSM coverage varies: unmapped trees do not mean no trees. Demo streets, buildings and trees are illustrative. Live routes use mapped public walking access; check signs and crossings on the ground.</p><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap data & contributors ↗</a></dialog>`;
 // Keep the time toolbar outside the map canvas so it never covers geography.
 const mapShell = $(".map-shell");
 const mapScene = document.createElement("div");
@@ -287,8 +289,6 @@ function drawShade() {
     : `Sun ${elevation}° above horizon · ${compass} · shadows point ${["S", "SW", "W", "NW", "N", "NE", "E", "SE"][Math.round(bearing / 45) % 8]}`;
   $(".map-shell").classList.toggle("night", scored.shapes.night);
 }
-const formatDistance = (m) =>
-  m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
 function drawRoutes(fit = false) {
   updateWalkingStatus();
   routeLayer.clearLayers();
@@ -328,6 +328,12 @@ function drawRoutes(fit = false) {
       { paddingTopLeft: [45, 80], paddingBottomRight: [55, 55], maxZoom: 18 },
     );
 }
+function arrivalLabel(minutes) {
+  const departure = date();
+  const arrival = arrivalTime(departure, minutes);
+  const nextDay = arrival.toDateString() !== departure.toDateString();
+  return arrival.toLocaleString([], {hour:"numeric", minute:"2-digit", ...(nextDay ? {month:"short", day:"numeric"} : {})});
+}
 function renderCards() {
   if (!pair) {
     $("#route-cards").innerHTML =
@@ -338,7 +344,7 @@ function renderCards() {
   $("#route-cards").innerHTML = ["shadiest", "shortest"]
     .map((kind) => {
       const r = pair[kind];
-      return `<button class="route-card ${selected === kind ? "selected" : ""}" data-route="${kind}" aria-pressed="${selected === kind}"><div class="route-card-head"><span class="route-icon">${icon(kind === "shadiest" ? "leaf" : "walk")}</span><strong>${kind === "shadiest" ? "The shaadiest path" : "The shortest path"}</strong><span class="radio"></span></div><div class="route-metrics"><strong>${r.minutes}<small>min</small></strong><span>${formatDistance(r.length)} walk</span><span class="shade-badge">${Math.round(r.shade * 100)}% shade</span></div><div class="shade-track"><span style="width:${r.shade * 100}%"></span></div></button>`;
+      return `<button class="route-card ${selected === kind ? "selected" : ""}" data-route="${kind}" aria-pressed="${selected === kind}"><div class="route-card-head"><span class="route-icon">${icon(kind === "shadiest" ? "leaf" : "walk")}</span><strong>${kind === "shadiest" ? "The shaadiest path" : "The shortest path"}</strong><span class="radio"></span></div><div class="route-metrics"><strong>${r.minutes}<small>min</small></strong><span>${formatDistance(r.length)} walk</span><span class="shade-badge">${Math.round(r.shade * 100)}% shade</span></div><p class="route-arrival">Est. arrival <strong>${arrivalLabel(r.minutes)}</strong><small>Based on selected departure · your local time</small></p><div class="shade-track"><span style="width:${r.shade * 100}%"></span></div></button>`;
     })
     .join("");
   const saved = Math.max(0, pair.shortest.exposed - pair.shadiest.exposed),
@@ -417,7 +423,7 @@ function renderNavigation() {
     return;
   }
   const route = pair[selected];
-  box.innerHTML = `<div class="nav-heading"><strong>${data.source === "demo" ? "Demo walk" : "Walking directions"}</strong><button id="close-nav" aria-label="Close directions">×</button></div><p>${route.minutes} min · ${formatDistance(route.length)} · ${Math.round(route.shade * 100)}% estimated shade</p><ol id="steps"></ol>`;
+  box.innerHTML = `<div class="nav-heading"><strong>${data.source === "demo" ? "Demo walk" : "Walking directions"}</strong><button id="close-nav" aria-label="Close directions">×</button></div><p>${route.minutes} min · Arrive ${arrivalLabel(route.minutes)} · ${formatDistance(route.length)} · ${Math.round(route.shade * 100)}% estimated shade</p><ol id="steps"></ol>`;
   const grouped = [];
   for (const e of route.segments) {
     const last = grouped.at(-1);
@@ -462,6 +468,7 @@ $("#detour").oninput = (e) => {
 $("#detour").onchange = () => calculate();
 function setHour(value, fit = false, deferred = false) {
   clockHour = Number(value);
+  document.dispatchEvent(new Event("departure-change"));
   $("#time").value = Math.round(clockHour * 60);
   document
     .querySelectorAll("[data-hour]")
@@ -490,7 +497,7 @@ $("#reset-time").onclick = () => {
   ].join("-");
   setHour(now.getHours() + now.getMinutes() / 60);
 };
-$("#date").onchange = () => calculate();
+$("#date").onchange = () => { calculate(); document.dispatchEvent(new Event("departure-change")); };
 $("#find").onclick = () => {
   if (busy) return;
   if (!pair) {
@@ -560,7 +567,7 @@ function placePin(which, position, resolvedSnap = null) {
   const snap = resolvedSnap || snapToPath(data, project(position, data.origin));
   if (!snap) {
     setStatus(
-      "No walking path within 80 m. Move closer to a mapped path.",
+      "No walking path within 262 ft. Move closer to a mapped path.",
       true,
     );
     drawPins();
@@ -588,7 +595,7 @@ function placePin(which, position, resolvedSnap = null) {
   calculate();
   drawPins();
   setStatus(
-    `Pin placed on ${snap.edge.name}${snap.distance >= 1 ? ` · snapped ${Math.round(snap.distance)} m to path` : ""}. Drag either pin to adjust.`,
+    `Pin placed on ${snap.edge.name}${snap.distance >= 1 ? ` · snapped ${formatDistance(snap.distance)} to path` : ""}. Drag either pin to adjust.`,
   );
   if (which === "end") setSheetExpanded(true);
   if (start !== null && end === null) choose("end");
@@ -668,7 +675,7 @@ async function loadArea(centerOverride = null) {
     setOptions();
     $("#pick-start").textContent = "Choose on map";
     $("#pick-end").textContent = "Choose on map";
-    $("#map-location").textContent = `Live · ${radius} km around loaded center`;
+    $("#map-location").textContent = `Live · ${radius} ${radius === 1 ? "mile" : "miles"} around loaded center`;
     updateNote();
     calculate();
     choose("start");
@@ -733,6 +740,10 @@ for (const which of ["start", "end"]) {
         const button = document.createElement("button");
         button.type = "button";
         button.textContent = place.name;
+        const detail = document.createElement("small");
+        detail.className = "place-result-detail";
+        detail.textContent = [place.category, place.cuisine, place.address].filter(Boolean).join(" · ");
+        button.append(detail);
         button.onclick = () => {
           if (busy) return;
           const snapped = snapPlace(data, place);
@@ -762,7 +773,7 @@ function updateWalkingStatus(message) {
   const age = Date.now() - latestFix.timestamp;
   const accuracy = Math.round(latestFix.coords.accuracy);
   if (age > 20000) { box.textContent = "Location is stale — waiting for a fresh GPS update."; return; }
-  const label = "Live location · accuracy ±" + accuracy + " m";
+  const label = "Live location · accuracy ±" + formatDistance(accuracy);
   if (accuracy > 35) { box.textContent = label + " · Waiting for a more accurate fix."; return; }
   if (data.source !== "live" || !pair) { box.textContent = label + " · Load your area and choose a walking route."; return; }
   const point = project({lat:latestFix.coords.latitude,lng:latestFix.coords.longitude}, data.origin);
@@ -774,7 +785,7 @@ function updateWalkingStatus(message) {
     const destination = data.nodes[pair[selected].path.at(-1)].point;
     const atDestination = Math.hypot(point[0]-destination[0],point[1]-destination[1]) <= 15 && progress.remaining <= 20;
     box.textContent = atDestination ? "You are near your destination · " + label :
-      formatDistance(progress.remaining) + " remaining · about " + Math.max(1,Math.round(progress.remaining/80)) + " min · " + (progress.name || "Walking path") + " · accuracy ±" + accuracy + " m";
+      formatDistance(progress.remaining) + " remaining · about " + Math.max(1,Math.round(progress.remaining/80)) + " min · " + (progress.name || "Walking path") + " · accuracy ±" + formatDistance(accuracy);
   }
 }
 function stopTracking(message) {
@@ -845,7 +856,7 @@ $("#use-current-start").onclick = async () => {
     if (fix.coords.accuracy > 50) throw Error("Location is too approximate to set your start. Try again outdoors or place the start on the map.");
     if (busy || data.source !== "live") throw Error("The map area changed. Try using your location again after loading a Live map area.");
     const position = {lat:fix.coords.latitude,lng:fix.coords.longitude};
-    if (!snapToPath(data, project(position, data.origin))) throw Error("No walking path within 80 m of your location in the loaded area. Load your area first or choose a start on the map.");
+    if (!snapToPath(data, project(position, data.origin))) throw Error("No walking path within 262 ft of your location in the loaded area. Load your area first or choose a start on the map.");
     placePin("start", position);
   } catch (error) {
     setStatus(error.code === 1 ? "Location permission denied. Allow location access or choose your start on the map."
@@ -863,3 +874,5 @@ setOptions();
 updateNote();
 drawBase();
 setHour(clockHour, true);
+
+mountWeather(map, $("#weather-widget"), date);

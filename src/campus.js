@@ -4,18 +4,23 @@ export function areaPlaces(raw) {
   const seen = new Set();
   return raw.elements.flatMap(e => {
     const tags = e.tags || {};
-    if (!tags.name || tags.highway) return [];
+    const foodTypes = {restaurant:"Restaurant", fast_food:"Fast food restaurant", cafe:"Cafe", food_court:"Food court", bar:"Bar", pub:"Pub", ice_cream:"Ice cream"};
+    const category = foodTypes[tags.amenity] || (tags.shop ? "Shop" : tags.building ? "Building" : "Place");
+    const name = tags.name || (foodTypes[tags.amenity] && (tags.brand || tags.operator));
+    if (!name || tags.highway) return [];
     const geometry = e.geometry || e.members?.flatMap(m => m.geometry || []) || [];
     const point = Number.isFinite(e.lat) ? {lat:e.lat,lng:e.lon} : geometry.length ? {
       lat:geometry.reduce((sum,p)=>sum+p.lat,0)/geometry.length,
       lng:geometry.reduce((sum,p)=>sum+p.lon,0)/geometry.length,
     } : null;
     if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return [];
-    const key = `${tags.name.toLowerCase()}:${point.lat.toFixed(5)},${point.lng.toFixed(5)}`;
+    const key = `${name.toLowerCase()}:${point.lat.toFixed(5)},${point.lng.toFixed(5)}`;
     if (seen.has(key)) return [];
     seen.add(key);
     const boundaries = e.geometry ? [e.geometry] : (e.members || []).filter(m => m.role !== "inner").map(m => m.geometry || []);
-    return [{boundaries, name:tags.name, aliases:[tags.short_name,tags.alt_name,tags.ref].filter(Boolean).join(" "), ...point}];
+    const cuisine = (tags.cuisine || "").replaceAll(";", ", ").replaceAll("_", " ");
+    const address = [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" ");
+    return [{boundaries, name, category, cuisine, address, aliases:[tags.short_name,tags.alt_name,tags.ref,tags.brand,tags.operator,category,cuisine,address].filter(Boolean).join(" "), ...point}];
   });
 }
 export function searchPlaces(places, query) {
