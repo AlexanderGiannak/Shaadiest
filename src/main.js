@@ -1,7 +1,7 @@
 import { formatDistance } from "./units.js";
 import { arrivalTime, mountWeather } from "./weather.js";
 import { areaPlaces, searchPlaces, snapPlace } from "./campus.js";
-import { walkingProgress } from "./walking.js";
+import { walkingProgress, travelHeading, directionGuidance } from "./walking.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./style.css";
@@ -11,7 +11,7 @@ import {
   project,
   unproject,
   scoreGraph,
-  routes,
+  routesThrough,
   snapToPath,
   canopyOutline,
 } from "./engine.js";
@@ -37,6 +37,8 @@ let data = demoData(),
   pair,
   start = 0,
   end = 48,
+  third = null,
+  thirdEnabled = false,
   selected = "shadiest",
   pick = null,
   busy = false,
@@ -50,7 +52,7 @@ $("#app").innerHTML = `
 <header class="header"><a class="brand" href="/" aria-label="Shaadiest home"><span class="brandmark">${icon("leaf")}</span>shaadiest<span class="branddot">.</span></a><span class="header-note">A cooler way there.</span><div class="header-right"><span class="event">SHELLHACKS ’26</span><button class="text-button" id="about">How it works ${icon("info")}</button></div></header>
 <main class="workspace"><aside class="sidebar"><div class="eyebrow">MADE FOR THE WALK</div><h1>Take the<br/> <em>shady</em> route.</h1><p class="intro">A little more green. A lot less sun.</p>
 <div class="mode-switch" aria-label="Data source"><button id="demo-mode" class="active">Explore demo</button><button id="live-mode">Live map</button></div>
-<div class="area-scope"><label for="area-radius">Area around map center</label><select id="area-radius" aria-label="Map loading radius"><option value="1">1 mile</option><option value="2" selected>2 miles</option><option value="3">3 miles</option><option value="4">4 miles</option><option value="5">5 miles</option></select></div><p class="campus-scope">Pan anywhere, then choose Live map or Load this area to search restaurants, cafes, shops, and buildings by name.</p><div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("origin")}</button><span class="field"><input id="search-start" class="endpoint-search" type="search" autocomplete="off" aria-label="Search starting point" placeholder="Search starting point" aria-controls="results-start"/><div id="results-start" class="endpoint-results" aria-live="polite"></div><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-end" class="endpoint-search" type="search" autocomplete="off" aria-label="Search destination" placeholder="Search destination" aria-controls="results-end"/><div id="results-end" class="endpoint-results" aria-live="polite"></div><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div></div><button id="use-current-start" class="current-start" type="button">Use current location</button>
+<div class="area-scope"><label for="area-radius">Area around map center</label><select id="area-radius" aria-label="Map loading radius"><option value="1">1 mile</option><option value="2" selected>2 miles</option><option value="3">3 miles</option><option value="4">4 miles</option><option value="5">5 miles</option></select></div><p class="campus-scope">Pan anywhere, then choose Live map or Load this area to search restaurants, cafes, shops, and buildings by name.</p><div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("origin")}</button><span class="field"><input id="search-start" class="endpoint-search" type="search" autocomplete="off" aria-label="Search starting point" placeholder="Search starting point" aria-controls="results-start"/><div id="results-start" class="endpoint-results" aria-live="polite"></div><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-end" class="endpoint-search" type="search" autocomplete="off" aria-label="Search destination" placeholder="Search destination" aria-controls="results-end"/><div id="results-end" class="endpoint-results" aria-live="polite"></div><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div><div id="third-stop" class="place-label" hidden><button id="drop-third" class="pin-picker" type="button" aria-label="Choose third location on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-third" class="endpoint-search" type="search" autocomplete="off" aria-label="Search third location" placeholder="Search next destination" aria-controls="results-third"/><div id="results-third" class="endpoint-results" aria-live="polite"></div><select id="third" hidden></select><button id="pick-third" hidden></button><button id="remove-stop" class="add-stop" type="button">Remove stop</button></span></div></div><div class="journey-actions"><button id="use-current-start" class="current-start" type="button">Use current location</button><button id="add-stop" class="add-stop" type="button" aria-expanded="false" aria-controls="third-stop">+ Add stop</button></div>
 <div class="time-card"><div class="time-head"><div class="sun-disc">${icon("sun")}</div><div><span class="small-label">PLAN WITH THE SUN</span><h3>Shade moves. Your route can too.</h3></div><div class="time-value" id="time-value"></div></div><div class="time-controls"><label class="date-wrap"><span class="sr-only">Departure date</span><input id="date" type="date" value="${dateValue}"/></label><input id="time" type="range" min="0" max="1439" step="1" value="${Math.round(clockHour * 60)}" aria-label="Departure time"/></div><div class="time-foot"><span id="timezone">Demo time · Miami (UTC−04:00)</span><span>12 AM <span class="time-separator">⸱</span> 11:59 PM</span></div><div class="time-presets" aria-label="Time of day"><button id="reset-time" type="button" title="Reset to your current local date and time" aria-label="Reset to current local date and time">Now</button><button data-hour="9">Morning</button><button data-hour="13">Midday</button><button data-hour="17">Evening</button></div><p id="sun-summary" aria-live="polite"></p></div>
 <div class="preference"><div><label for="detour">Room for a cooler walk</label><strong id="detour-label">+50% distance</strong></div><input id="detour" type="range" min="0" max="75" step="5" value="50"/><div class="range-labels"><span>More direct</span><span>More shade</span></div></div>
 <button id="find" class="primary">${icon("leaf")} Find my shady path ${icon("arrow")}</button>
@@ -172,7 +174,7 @@ function date() {
   return d;
 }
 function setOptions() {
-  for (const which of ["start", "end"]) {
+  for (const which of ["start", "end", "third"]) {
     const sel = $("#" + which);
     sel.innerHTML = "";
     for (const p of data.places || []) {
@@ -181,7 +183,7 @@ function setOptions() {
       o.textContent = p.name;
       sel.append(o);
     }
-    sel.value = which === "start" ? start : end;
+    sel.value = which === "start" ? start : which === "end" ? end : third;
     sel.hidden = true;
     $("#pick-" + which).hidden = true;
   }
@@ -392,14 +394,14 @@ function calculate(fit = false) {
         treeShadows: scored.shapes.treeShadows });
     }
   }
-  if (start === null || end === null) {
+  if (start === null || end === null || (thirdEnabled && third === null)) {
     pair = null;
     renderCards();
     drawRoutes();
     return;
   }
   try {
-    pair = routes(data, scored, start, end, detour);
+    pair = routesThrough(data, scored, thirdEnabled ? [start,end,third] : [start,end], detour);
     setStatus(
       scored.shapes.night
         ? "The sun is below the horizon at this location and time."
@@ -450,14 +452,11 @@ $("#end").onchange = (e) => {
   calculate(true);
 };
 $("#swap").onclick = () => {
-  [start, end] = [end, start];
-  [$("#search-start").value,$("#search-end").value] = [$("#search-end").value,$("#search-start").value];
+  const last = thirdEnabled ? "third" : "end";
+  if (thirdEnabled) [start,third] = [third,start];
+  else [start,end] = [end,start];
+  [$("#search-start").value,$("#search-"+last).value] = [$("#search-"+last).value,$("#search-start").value];
   setOptions();
-  if (data.source === "live") {
-    const a = $("#pick-start").textContent;
-    $("#pick-start").textContent = $("#pick-end").textContent;
-    $("#pick-end").textContent = a;
-  }
   calculate();
 };
 $("#detour").oninput = (e) => {
@@ -519,9 +518,10 @@ $("#about").onclick = () => $("#about-dialog").showModal();
 $(".dialog-close").onclick = () => $("#about-dialog").close();
 function drawPins() {
   markerLayer.clearLayers();
-  for (const [which, id, label] of [
-    ["start", start, "A"],
-    ["end", end, "B"],
+  for (const [which, id] of [
+    ["start", start],
+    ["end", end],
+    ["third", third],
   ]) {
     if (id === null) continue;
     const marker = L.marker(ll(data.nodes[id].point), {
@@ -530,14 +530,14 @@ function drawPins() {
       title: `Drag ${which === "start" ? "start" : "destination"} pin`,
       alt: `${which === "start" ? "Start" : "Destination"} pin`,
       icon: L.divIcon({
-        className: `drop-pin ${which}`,
-        html: `<span>${label}</span>`,
-        iconSize: [34, 44],
-        iconAnchor: [17, 43],
+        className: `drop-pin ${which === "start" ? "start" : "end"}`,
+        html: `<span></span>`,
+        iconSize: which === "start" ? [32,32] : [34,44],
+        iconAnchor: which === "start" ? [16,16] : [17,43],
       }),
     }).addTo(markerLayer);
     marker.bindTooltip(
-      `${label} · ${which === "start" ? "Start" : "Destination"} · drag to move`,
+      `${which === "start" ? "Start" : "Destination"} · drag to move`,
       { direction: "top", offset: [0, -35] },
     );
     marker.on("dragend", () => placePin(which, marker.getLatLng()));
@@ -548,6 +548,7 @@ function cancelPick() {
   $("#cancel-drop").hidden = true;
   $("#drop-start").setAttribute("aria-pressed", "false");
   $("#drop-end").setAttribute("aria-pressed", "false");
+  $("#drop-third").setAttribute("aria-pressed", "false");
   map.getContainer().style.cursor = "";
   map.closePopup();
 }
@@ -557,6 +558,7 @@ function choose(which) {
   $("#cancel-drop").hidden = false;
   $("#drop-start").setAttribute("aria-pressed", which === "start");
   $("#drop-end").setAttribute("aria-pressed", which === "end");
+  $("#drop-third").setAttribute("aria-pressed", which === "third");
   map.getContainer().style.cursor = "crosshair";
 }
 function placePin(which, position, resolvedSnap = null) {
@@ -573,7 +575,7 @@ function placePin(which, position, resolvedSnap = null) {
     drawPins();
     return;
   }
-  if (snap.id === (which === "start" ? end : start)) {
+  if (Object.entries({start,end,third}).some(([key,id]) => key !== which && id === snap.id)) {
     setStatus(
       "Place the pins at different points along the walking path.",
       true,
@@ -585,7 +587,8 @@ function placePin(which, position, resolvedSnap = null) {
   $("#search-"+which).value = "Dropped pin · " + snap.edge.name;
   $("#results-"+which).replaceChildren();
   if (which === "start") start = snap.id;
-  else end = snap.id;
+  else if (which === "end") end = snap.id;
+  else third = snap.id;
   if (data.source === "demo" && !data.places.some((p) => p.id === snap.id))
     data.places.push({ id: snap.id, name: `Dropped pin · ${snap.edge.name}` });
   setOptions();
@@ -605,6 +608,26 @@ $("#pick-start").onclick = () => choose("start");
 $("#pick-end").onclick = () => choose("end");
 $("#drop-start").onclick = () => choose("start");
 $("#drop-end").onclick = () => choose("end");
+$("#drop-third").onclick = () => choose("third");
+$("#add-stop").onclick = () => {
+  thirdEnabled = true;
+  $("#third-stop").hidden = false;
+  $("#add-stop").hidden = true;
+  $("#add-stop").setAttribute("aria-expanded","true");
+  $("#search-third").focus();
+  calculate();
+};
+$("#remove-stop").onclick = () => {
+  thirdEnabled = false; third = null;
+  $("#third-stop").hidden = true;
+  $("#add-stop").hidden = false;
+  $("#add-stop").setAttribute("aria-expanded","false");
+  $("#search-third").value = "";
+  $("#results-third").replaceChildren();
+  if (pick === "third") cancelPick();
+  calculate();
+  $("#add-stop").focus();
+};
 $("#cancel-drop").onclick = cancelPick;
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") cancelPick();
@@ -663,9 +686,10 @@ async function loadArea(centerOverride = null) {
       );
     data = next;
     loadedPlaces = areaPlaces(raw);
-    for (const which of ["start","end"]) { $("#search-"+which).value=""; $("#results-"+which).replaceChildren(); }
+    for (const which of ["start","end","third"]) { $("#search-"+which).value=""; $("#results-"+which).replaceChildren(); }
     start = null;
     end = null;
+    third = null;
     pair = null;
     navigating = false;
     $("#navigation").hidden = true;
@@ -701,9 +725,10 @@ $("#demo-mode").onclick = () => {
   }
   modeUI(false);
   data = demoData();
-  for (const which of ["start","end"]) { $("#search-"+which).value=""; $("#results-"+which).replaceChildren(); }
+  for (const which of ["start","end","third"]) { $("#search-"+which).value=""; $("#results-"+which).replaceChildren(); }
   start = 0;
   end = 48;
+  third = null;
   cancelPick();
   map.getContainer().style.cursor = "";
   navigating = false;
@@ -714,7 +739,7 @@ $("#demo-mode").onclick = () => {
   drawBase();
   calculate(true);
 };
-for (const which of ["start", "end"]) {
+for (const which of ["start", "end", "third"]) {
   const input = $("#search-"+which), results = $("#results-"+which);
   let timer, revision = 0;
   input.addEventListener("input", () => {
@@ -745,13 +770,13 @@ for (const which of ["start", "end"]) {
         detail.textContent = [place.category, place.cuisine, place.address].filter(Boolean).join(" · ");
         button.append(detail);
         button.onclick = () => {
-          if (busy) return;
+          if (busy || (which === "third" && !thirdEnabled)) return;
           const snapped = snapPlace(data, place);
           if (!snapped) { setStatus("Could not connect this place to a mapped walking path. Choose a nearby entrance on the map.",true); return; }
           if (!placePin(which,place,snapped)) return;
           input.value = place.name;
           results.replaceChildren();
-          map.panTo(unproject(data.nodes[which === "start" ? start : end].point,data.origin));
+          map.panTo(unproject(data.nodes[which === "start" ? start : which === "end" ? end : third].point,data.origin));
         };
         results.append(button);
       }
@@ -765,11 +790,21 @@ for (const which of ["start", "end"]) {
 let locationWatch = null, locationSession = 0, latestFix = null, following = false;
 let positionMarker = null, accuracyCircle = null;
 const locationLayer = L.layerGroup().addTo(map);
+function locationIcon() {
+  const heading = travelHeading(latestFix);
+  return L.divIcon({className:"live-location", iconSize:[32,32], iconAnchor:[16,16],
+    html:`${heading === null ? "" : `<span class="location-heading" style="transform:rotate(${heading}deg)"></span>`}<span class="location-dot"></span>`});
+}
+function updateLocationDirection() {
+  if (positionMarker) positionMarker.setIcon(locationIcon());
+}
+
 function updateWalkingStatus(message) {
   const box = $("#walking-status");
   box.hidden = locationWatch === null && !message;
   if (message) { box.textContent = message; return; }
   if (!latestFix) { box.textContent = "Finding your location…"; return; }
+  updateLocationDirection();
   const age = Date.now() - latestFix.timestamp;
   const accuracy = Math.round(latestFix.coords.accuracy);
   if (age > 20000) { box.textContent = "Location is stale — waiting for a fresh GPS update."; return; }
@@ -785,7 +820,7 @@ function updateWalkingStatus(message) {
     const destination = data.nodes[pair[selected].path.at(-1)].point;
     const atDestination = Math.hypot(point[0]-destination[0],point[1]-destination[1]) <= 15 && progress.remaining <= 20;
     box.textContent = atDestination ? "You are near your destination · " + label :
-      formatDistance(progress.remaining) + " remaining · about " + Math.max(1,Math.round(progress.remaining/80)) + " min · " + (progress.name || "Walking path") + " · accuracy ±" + formatDistance(accuracy);
+      directionGuidance(travelHeading(latestFix), progress.bearing) + " · " + formatDistance(progress.remaining) + " remaining · about " + Math.max(1,Math.round(progress.remaining/80)) + " min · " + (progress.name || "Walking path") + " · accuracy ±" + formatDistance(accuracy);
   }
 }
 function stopTracking(message) {
@@ -822,7 +857,7 @@ $("#locate").onclick = () => {
     const latlng = [position.coords.latitude, position.coords.longitude];
     if (!positionMarker) {
       accuracyCircle = L.circle(latlng,{radius:position.coords.accuracy,color:"#2877df",weight:1,fillOpacity:0.08,interactive:false}).addTo(locationLayer);
-      positionMarker = L.circleMarker(latlng,{pane:"markerPane",radius:8,color:"#fff",weight:3,fillColor:"#2877df",fillOpacity:1,interactive:false}).addTo(locationLayer);
+      positionMarker = L.marker(latlng,{icon: locationIcon(), interactive:false, zIndexOffset:1000}).addTo(locationLayer);
     } else {
       positionMarker.setLatLng(latlng);
       accuracyCircle.setLatLng(latlng).setRadius(position.coords.accuracy);
@@ -857,7 +892,7 @@ $("#use-current-start").onclick = async () => {
     if (busy || data.source !== "live") throw Error("The map area changed. Try using your location again after loading a Live map area.");
     const position = {lat:fix.coords.latitude,lng:fix.coords.longitude};
     if (!snapToPath(data, project(position, data.origin))) throw Error("No walking path within 262 ft of your location in the loaded area. Load your area first or choose a start on the map.");
-    placePin("start", position);
+    if (placePin("start", position) && locationWatch === null) $("#locate").onclick();
   } catch (error) {
     setStatus(error.code === 1 ? "Location permission denied. Allow location access or choose your start on the map."
       : error.code === 2 || error.code === 3 ? "Could not get your location. Try again or choose your start on the map."

@@ -326,3 +326,16 @@ test("building parts are obstacles and indoor corridors are excluded", () => {
   assert.equal(walkable({highway:"corridor"}),false);
   assert.equal(walkable({highway:"footway",indoor:"yes"}),false);
 });
+
+import { routesThrough } from "../src/engine.js";
+test("three-location routes visit the stop in order and combine distance and exposure", () => {
+  const data = {nodes:[{point:[0,0]},{point:[80,0]},{point:[160,0]}]};
+  const scored = {edges:[{a:0,b:1,length:80,shade:0.5},{a:1,b:2,length:80,shade:1}]};
+  const pair = routesThrough(data,scored,[0,1,2]);
+  assert.deepEqual(pair.shortest.path,[0,1,2]);
+  assert.equal(pair.shortest.length,160);
+  assert.equal(pair.shortest.minutes,2);
+  assert.equal(pair.shortest.exposed,40);
+  assert.equal(pair.shortest.shade,0.75);
+  assert.throws(()=>routesThrough(data,{edges:[scored.edges[0]]},[0,1,2]),/not connected/);
+});

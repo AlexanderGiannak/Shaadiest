@@ -1300,41 +1300,13 @@ dialog a {
   max-width: calc(100% - 95px);
   font-size: 11px;
 }
-.drop-pin {
-  background: none;
-  border: 0;
-  filter: drop-shadow(0 3px 3px #193b3950);
-}
-.drop-pin span {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 3px solid white;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  background: #24583c;
-  color: transparent;
-}
-.drop-pin::after {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  color: white;
-  font-size: 13px;
-  font-weight: 700;
-  content: "A";
-}
-.drop-pin.end span {
-  background: #78574a;
-}
-.drop-pin.end::after {
-  content: "B";
-}
+.drop-pin { background: none; border: 0; }
+.drop-pin.start span, .location-dot { position: absolute; left: 5px; top: 5px; width: 22px; height: 22px; border: 3px solid #fff; border-radius: 50%; background: #3984f5; box-shadow: 0 0 0 7px #3984f526; }
+.drop-pin.end span { display: block; width: 34px; height: 34px; border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #df3636; box-shadow: 0 3px 8px #54202040; }
+.drop-pin.end::after { content: ""; position: absolute; top: 11px; left: 11px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+.live-location { background: none; border: 0; }
+.location-heading { position: absolute; inset: 0; transform-origin: 16px 16px; }
+.location-heading::before { content: ""; position: absolute; left: -8px; top: -30px; width: 48px; height: 46px; background: linear-gradient(#3984f510, #3984f57a); clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .pin-menu {
   display: grid;
   gap: 8px;
@@ -1458,3 +1430,10 @@ dialog a {
 }
 
 .place-result-detail { display: block; margin-top: 3px; color: #6a786b; font-size: 11px; line-height: 1.4; }
+
+.add-stop { justify-self: end; display: block; margin-left: auto; padding: 3px 0; background: transparent; color: #24583c; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.add-stop[hidden], #third-stop[hidden] { display: none; }
+#drop-third { color: #df3636; }
+
+.journey-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-right: 42px; margin-top: 6px; }
+.journey-actions .current-start, .journey-actions .add-stop { margin: 0; padding: 6px 0; font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1.5; letter-spacing: normal; text-underline-offset: 3px; }

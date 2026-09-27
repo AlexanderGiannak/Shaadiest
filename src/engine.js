@@ -510,3 +510,13 @@ export function snapToPath(data, point, maxDistance = 80) {
     },
   };
 }
+
+export function routesThrough(data, scored, stops, detour = 0.5) {
+  const legs = stops.slice(1).map((stop,i) => routes(data,scored,stops[i],stop,detour));
+  return Object.fromEntries(["shortest","shadiest"].map(kind => {
+    const parts = legs.map(leg => leg[kind]);
+    const length = parts.reduce((sum,r)=>sum+r.length,0);
+    const exposed = parts.reduce((sum,r)=>sum+r.exposed,0);
+    return [kind,{path:parts.flatMap((r,i)=>i ? r.path.slice(1) : r.path),segments:parts.flatMap(r=>r.segments),length,exposed,shade:length ? 1-exposed/length : 1,minutes:Math.max(1,Math.round(length/80))}];
+  }));
+}
