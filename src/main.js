@@ -1,4 +1,4 @@
-import { campusCenter, campusPlaces, searchCampus, snapCampusPlace } from "./campus.js";
+import { areaPlaces, searchPlaces, snapPlace } from "./campus.js";
 import { walkingProgress } from "./walking.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -48,7 +48,7 @@ $("#app").innerHTML = `
 <header class="header"><a class="brand" href="/" aria-label="Shaadiest home"><span class="brandmark">${icon("leaf")}</span>shaadiest<span class="branddot">.</span></a><span class="header-note">A cooler way there.</span><div class="header-right"><span class="event">SHELLHACKS ’26</span><button class="text-button" id="about">How it works ${icon("info")}</button></div></header>
 <main class="workspace"><aside class="sidebar"><div class="eyebrow">MADE FOR THE WALK</div><h1>Take the<br/> <em>shady</em> route.</h1><p class="intro">A little more green. A lot less sun.</p>
 <div class="mode-switch" aria-label="Data source"><button id="demo-mode" class="active">Explore demo</button><button id="live-mode">Live map</button></div>
-<p class="campus-scope">Search FIU · Modesto A. Maidique campus</p><div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("origin")}</button><span class="field"><input id="search-start" class="endpoint-search" type="search" autocomplete="off" aria-label="Search starting point" placeholder="Search starting point" aria-controls="results-start"/><div id="results-start" class="endpoint-results" aria-live="polite"></div><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-end" class="endpoint-search" type="search" autocomplete="off" aria-label="Search destination" placeholder="Search destination" aria-controls="results-end"/><div id="results-end" class="endpoint-results" aria-live="polite"></div><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div></div><button id="use-current-start" class="current-start" type="button">Use current location</button>
+<div class="area-scope"><label for="area-radius">Area around map center</label><select id="area-radius" aria-label="Map loading radius"><option value="1">1 km</option><option value="2" selected>2 km</option><option value="3">3 km</option></select></div><p class="campus-scope">Pan anywhere, then choose Live map or Load this area to search nearby places.</p><div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("origin")}</button><span class="field"><input id="search-start" class="endpoint-search" type="search" autocomplete="off" aria-label="Search starting point" placeholder="Search starting point" aria-controls="results-start"/><div id="results-start" class="endpoint-results" aria-live="polite"></div><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-end" class="endpoint-search" type="search" autocomplete="off" aria-label="Search destination" placeholder="Search destination" aria-controls="results-end"/><div id="results-end" class="endpoint-results" aria-live="polite"></div><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div></div><button id="use-current-start" class="current-start" type="button">Use current location</button>
 <div class="time-card"><div class="time-head"><div class="sun-disc">${icon("sun")}</div><div><span class="small-label">PLAN WITH THE SUN</span><h3>Shade moves. Your route can too.</h3></div><div class="time-value" id="time-value"></div></div><div class="time-controls"><label class="date-wrap"><span class="sr-only">Departure date</span><input id="date" type="date" value="${dateValue}"/></label><input id="time" type="range" min="0" max="1439" step="1" value="${Math.round(clockHour * 60)}" aria-label="Departure time"/></div><div class="time-foot"><span id="timezone">Demo time · Miami (UTC−04:00)</span><span>12 AM <span class="time-separator">⸱</span> 11:59 PM</span></div><div class="time-presets" aria-label="Time of day"><button id="reset-time" type="button" title="Reset to your current local date and time" aria-label="Reset to current local date and time">Now</button><button data-hour="9">Morning</button><button data-hour="13">Midday</button><button data-hour="17">Evening</button></div><p id="sun-summary" aria-live="polite"></p></div>
 <div class="preference"><div><label for="detour">Room for a cooler walk</label><strong id="detour-label">+50% distance</strong></div><input id="detour" type="range" min="0" max="75" step="5" value="50"/><div class="range-labels"><span>More direct</span><span>More shade</span></div></div>
 <button id="find" class="primary">${icon("leaf")} Find my shady path ${icon("arrow")}</button>
@@ -633,8 +633,8 @@ function modeUI(live) {
 
   $("#load-area").hidden = !live;
 }
-let loadedCampusPlaces = [];
-let campusLoaded = false;
+let loadedPlaces = [];
+
 async function loadArea(centerOverride = null) {
   if (busy) return;
   busy = true;
@@ -644,18 +644,18 @@ async function loadArea(centerOverride = null) {
     "Loading paths, trees and buildings. This can take up to a minute.",
   );
   const center = centerOverride || map.getCenter();
+  const radius = Number($("#area-radius").value);
   try {
-    const r = await fetch(`/api/area?lat=${center.lat}&lng=${center.lng}`);
-    const raw = await r.json();
-    if (!r.ok) throw Error(raw.error);
+    const r = await fetch(`/api/area?lat=${center.lat}&lng=${center.lng}&radius=${radius}`, {signal: AbortSignal.timeout(50000)});
+    const raw = await r.json().catch(() => { throw Error("Map loading timed out. Your current map is unchanged. Try a smaller area or retry."); });
+    if (!r.ok) throw Error(raw.error || "Map loading failed. Please retry.");
     const next = parseOSM(raw, center);
     if (!next.edges.length)
       throw Error(
         "No walkable paths found. Move to another neighborhood and try again.",
       );
     data = next;
-    loadedCampusPlaces = campusPlaces(raw);
-    campusLoaded = Math.abs(center.lat-campusCenter.lat)<0.0001 && Math.abs(center.lng-campusCenter.lng)<0.0001;
+    loadedPlaces = areaPlaces(raw);
     for (const which of ["start","end"]) { $("#search-"+which).value=""; $("#results-"+which).replaceChildren(); }
     start = null;
     end = null;
@@ -668,14 +668,14 @@ async function loadArea(centerOverride = null) {
     setOptions();
     $("#pick-start").textContent = "Choose on map";
     $("#pick-end").textContent = "Choose on map";
-    $("#map-location").textContent = "Live · OpenStreetMap";
+    $("#map-location").textContent = `Live · ${radius} km around loaded center`;
     updateNote();
     calculate();
     choose("start");
-    setStatus("Area loaded. Search for your start and destination at FIU.");
+    setStatus(raw.stale ? "Using recently saved map data while providers are busy. Search nearby places or drop pins." : "Area loaded. Search nearby places or drop pins. Pan and load another area to explore farther.");
     return true;
   } catch (e) {
-    setStatus(e.message, true);
+    setStatus(e.name === "TimeoutError" ? "Map loading timed out. Your current map is unchanged. Try a smaller area or retry." : e.message, true);
   } finally {
     busy = false;
     $("#load-area").disabled = false;
@@ -717,26 +717,25 @@ for (const which of ["start", "end"]) {
     if (query.length < 2) return;
     timer = setTimeout(async () => {
       if (busy) { results.textContent = "Map is loading. Type again when it finishes."; return; }
-      if (data.source !== "live" || !campusLoaded) {
-        results.textContent = "Loading FIU campus places…";
-        const ok = await loadArea(campusCenter);
+      if (data.source !== "live") {
+        results.textContent = "Loading nearby places…";
+        const ok = await loadArea();
         if (request !== revision) return;
         input.value = query;
-        if (!ok) { results.textContent = "Campus data unavailable. Try searching again."; return; }
+        if (!ok) { results.textContent = "Area data unavailable. Try searching again."; return; }
         modeUI(true);
-        map.setView(campusCenter,16);
       }
       if (request !== revision) return;
       results.replaceChildren();
-      const matches = searchCampus(loadedCampusPlaces,query);
-      if (!matches.length) results.textContent = "No mapped FIU places found. Try another name or drop a pin.";
+      const matches = searchPlaces(loadedPlaces,query);
+      if (!matches.length) results.textContent = "No matching places in the loaded area. Pan and load another area, try another name, or drop a pin.";
       for (const place of matches) {
         const button = document.createElement("button");
         button.type = "button";
         button.textContent = place.name;
         button.onclick = () => {
           if (busy) return;
-          const snapped = snapCampusPlace(data, place);
+          const snapped = snapPlace(data, place);
           if (!snapped) { setStatus("Could not connect this place to a mapped walking path. Choose a nearby entrance on the map.",true); return; }
           if (!placePin(which,place,snapped)) return;
           input.value = place.name;

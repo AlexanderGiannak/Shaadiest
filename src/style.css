@@ -1432,3 +1432,6 @@ dialog a {
 .endpoint-results:not(:empty) { border: 1px solid #d5dfd1; padding: 4px; }
 .endpoint-results button { display: block; width: 100%; min-height: 44px; padding: 10px; border-radius: 5px; text-align: left; background: #fff; }
 .endpoint-results button:hover, .endpoint-results button:focus-visible { background: #eef3e7; }
+
+.area-scope { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; font-size: 12px; color: #52634f; }
+.area-scope select { padding: 8px; border: 1px solid #d5dfd1; border-radius: 8px; background: #fff; color: #24583c; }

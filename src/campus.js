@@ -1,11 +1,6 @@
 import { project, snapToPath } from "./engine.js";
 
-export const campusCenter = { lat: 25.756, lng: -80.374 };
-// Initial search window: FIU Modesto A. Maidique campus, Miami.
-export function inCampus(lat, lng) {
-  return lat >= 25.7485 && lat <= 25.7625 && lng >= -80.3835 && lng <= -80.3675;
-}
-export function campusPlaces(raw) {
+export function areaPlaces(raw) {
   const seen = new Set();
   return raw.elements.flatMap(e => {
     const tags = e.tags || {};
@@ -15,24 +10,24 @@ export function campusPlaces(raw) {
       lat:geometry.reduce((sum,p)=>sum+p.lat,0)/geometry.length,
       lng:geometry.reduce((sum,p)=>sum+p.lon,0)/geometry.length,
     } : null;
-    if (!point || !inCampus(point.lat,point.lng)) return [];
-    const key = tags.name.toLowerCase();
+    if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return [];
+    const key = `${tags.name.toLowerCase()}:${point.lat.toFixed(5)},${point.lng.toFixed(5)}`;
     if (seen.has(key)) return [];
     seen.add(key);
     const boundaries = e.geometry ? [e.geometry] : (e.members || []).filter(m => m.role !== "inner").map(m => m.geometry || []);
     return [{boundaries, name:tags.name, aliases:[tags.short_name,tags.alt_name,tags.ref].filter(Boolean).join(" "), ...point}];
   });
 }
-export function searchCampus(places, query) {
+export function searchPlaces(places, query) {
   const normalize = value => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const words = normalize(query).trim().split(/\s+/).filter(Boolean);
-  return words.length ? places.filter(p => inCampus(p.lat,p.lng) && words.every(w=>normalize(p.name+" "+p.aliases).includes(w)))
+  return words.length ? places.filter(p => words.every(w=>normalize(p.name+" "+p.aliases).includes(w)))
     .sort((a,b)=>a.name.localeCompare(b.name)).slice(0,8) : [];
 }
 
 // Large places are searchable by their mapped perimeter as well as their center.
 // Keep separate relation members separate so gaps never become invented edges.
-export function snapCampusPlace(data, place) {
+export function snapPlace(data, place) {
   const center = snapToPath(data, project(place, data.origin));
   if (center) return center;
   let best = null;
