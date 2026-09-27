@@ -159,18 +159,43 @@ export function crossesBuilding(a, b, polygon) {
   }
   return false;
 }
+// Bucket nearby shapes to avoid scanning the entire city for each path.
+function polygonBounds(polygon) {
+  return polygon.reduce((b,p) => [Math.min(b[0],p[0]), Math.min(b[1],p[1]), Math.max(b[2],p[0]), Math.max(b[3],p[1])], [Infinity,Infinity,-Infinity,-Infinity]);
+}
+function spatialIndex(polygons) {
+  const cells = new Map(), large = [], all = [];
+  const overlaps = (a,b) => a[0]<=b[2] && a[2]>=b[0] && a[1]<=b[3] && a[3]>=b[1];
+  const range = b => b.map(v => Math.floor(v/100));
+  for (const polygon of polygons) {
+    if (!polygon.length) continue;
+    const entry = {polygon, box:polygonBounds(polygon)};
+    all.push(entry);
+    const [x0,y0,x1,y1] = range(entry.box);
+    // Keep very large forests outside the grid to bound memory use.
+    if ((x1-x0+1)*(y1-y0+1)>400) {large.push(entry); continue;}
+    for (let x=x0;x<=x1;x++) for (let y=y0;y<=y1;y++) {
+      const key = `${x},${y}`;
+      if (!cells.has(key)) cells.set(key,[]);
+      cells.get(key).push(entry);
+    }
+  }
+  return box => {
+    const [x0,y0,x1,y1] = range(box);
+    if ((x1-x0+1)*(y1-y0+1)>400) return all.filter(e=>overlaps(e.box,box)).map(e=>e.polygon);
+    const candidates = new Set(large);
+    for (let x=x0;x<=x1;x++) for (let y=y0;y<=y1;y++)
+      for (const entry of cells.get(`${x},${y}`)||[]) candidates.add(entry);
+    return [...candidates].filter(e=>overlaps(e.box,box)).map(e=>e.polygon);
+  };
+}
 const buildingAccessCache = new WeakMap();
 function blockedEdges(data) {
   if (buildingAccessCache.has(data)) return buildingAccessCache.get(data);
-  const footprints = (data.buildings || []).map(({ points }) => ({
-    points, minX: Math.min(...points.map(p => p[0])), maxX: Math.max(...points.map(p => p[0])),
-    minY: Math.min(...points.map(p => p[1])), maxY: Math.max(...points.map(p => p[1])),
-  }));
+  const nearby = spatialIndex((data.buildings || []).map(b => b.points));
   const blocked = new Set(data.edges.filter(edge => {
-    // Strict outdoor routing: even mapped passages cannot cross a footprint.
     const a = data.nodes[edge.a].point, b = data.nodes[edge.b].point;
-    return footprints.some(f => f.minX <= Math.max(a[0], b[0]) && f.maxX >= Math.min(a[0], b[0]) &&
-      f.minY <= Math.max(a[1], b[1]) && f.maxY >= Math.min(a[1], b[1]) && crossesBuilding(a, b, f.points));
+    return nearby(polygonBounds([a,b])).some(polygon => crossesBuilding(a,b,polygon));
   }));
   buildingAccessCache.set(data, blocked);
   return blocked;
@@ -178,23 +203,17 @@ function blockedEdges(data) {
 
 export function scoreGraph(data, date) {
   const shapes = shadowShapes(data, date);
-  const bounds = polygon => polygon.reduce((box, p) => [
-    Math.min(box[0], p[0]), Math.min(box[1], p[1]),
-    Math.max(box[2], p[0]), Math.max(box[3], p[1]),
-  ], [Infinity, Infinity, -Infinity, -Infinity]);
   const indexed = Object.fromEntries(["polygons", "treeShadows", "woods"].map(key =>
-    [key, shapes[key].map(polygon => ({polygon, box: bounds(polygon)}))]));
+    [key, spatialIndex(shapes[key])]));
   return {
     shapes,
     edges: data.edges.filter(e => !blockedEdges(data).has(e)).map(e => {
       const a = data.nodes[e.a].point, b = data.nodes[e.b].point;
-      const box = bounds([a, b]);
+      const box = polygonBounds([a, b]);
       // Reject distant shapes before the detailed five-meter sampling.
       const nearby = shapes.night || e.covered ? shapes : {
         ...shapes,
-        ...Object.fromEntries(Object.entries(indexed).map(([key, entries]) => [key,
-          entries.filter(({box: other}) => other[0] <= box[2] && other[2] >= box[0] &&
-            other[1] <= box[3] && other[3] >= box[1]).map(entry => entry.polygon),
+        ...Object.fromEntries(Object.entries(indexed).map(([key, query]) => [key, query(box),
         ])),
       };
       return {...e, length: distance(a, b), shade: sampleShade(a, b, nearby, e.covered)};

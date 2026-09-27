@@ -339,3 +339,19 @@ test("three-location routes visit the stop in order and combine distance and exp
   assert.equal(pair.shortest.shade,0.75);
   assert.throws(()=>routesThrough(data,{edges:[scored.edges[0]]},[0,1,2]),/not connected/);
 });
+
+test("spatial shade lookup matches full sampling across grid boundaries and large areas", () => {
+  const d = {
+    origin: {lat:25.756,lng:-80.374},
+    nodes: [[-101,-100],[100,-100],[-3000,0],[3000,0],[100,100],[110,100]].map(point=>({point})),
+    edges: [{a:0,b:1},{a:2,b:3},{a:4,b:5}],
+    buildings: [{points:[[90,110],[110,110],[110,130],[90,130]],height:12}],
+    trees: [{point:[-100,-100],radius:10,height:10}],
+    woods: [[[-2500,-40],[2500,-40],[2500,40],[-2500,40]]],
+  };
+  for (const hour of [9,13,17]) {
+    const result = scoreGraph(d,new Date(`2026-09-26T${String(hour).padStart(2,'0')}:00:00-04:00`));
+    assert.equal(result.edges.length,d.edges.length);
+    for (const edge of result.edges) assert.equal(edge.shade,sampleShade(d.nodes[edge.a].point,d.nodes[edge.b].point,result.shapes));
+  }
+});

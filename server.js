@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import app from "./lib/api.js";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT) || 5186;
-if (process.env.NODE_ENV === "production") {
+if (process.env.NODE_ENV === "production" || process.argv.includes("--production")) {
   app.use(express.static(path.join(root, "dist")));
   app.get("/{*splat}", (req, res) =>
     res.sendFile(path.join(root, "dist/index.html")),

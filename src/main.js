@@ -52,7 +52,7 @@ $("#app").innerHTML = `
 <header class="header"><a class="brand" href="/" aria-label="Shaadiest home"><span class="brandmark">${icon("leaf")}</span>shaadiest<span class="branddot">.</span></a><span class="header-note">A cooler way there.</span><div class="header-right"><span class="event">SHELLHACKS ’26</span><button class="text-button" id="about">How it works ${icon("info")}</button></div></header>
 <main class="workspace"><aside class="sidebar"><div class="eyebrow">MADE FOR THE WALK</div><h1>Take the<br/> <em>shady</em> route.</h1><p class="intro">A little more green. A lot less sun.</p>
 <div class="mode-switch" aria-label="Data source"><button id="demo-mode" class="active">Explore demo</button><button id="live-mode">Live map</button></div>
-<div class="area-scope"><label for="area-radius">Area around map center</label><select id="area-radius" aria-label="Map loading radius"><option value="1">1 mile</option><option value="2" selected>2 miles</option><option value="3">3 miles</option><option value="4">4 miles</option><option value="5">5 miles</option></select></div><p class="campus-scope">Pan anywhere, then choose Live map or Load this area to search restaurants, cafes, shops, and buildings by name.</p><div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("origin")}</button><span class="field"><input id="search-start" class="endpoint-search" type="search" autocomplete="off" aria-label="Search starting point" placeholder="Search starting point" aria-controls="results-start"/><div id="results-start" class="endpoint-results" aria-live="polite"></div><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-end" class="endpoint-search" type="search" autocomplete="off" aria-label="Search destination" placeholder="Search destination" aria-controls="results-end"/><div id="results-end" class="endpoint-results" aria-live="polite"></div><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div><div id="third-stop" class="place-label" hidden><button id="drop-third" class="pin-picker" type="button" aria-label="Choose third location on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-third" class="endpoint-search" type="search" autocomplete="off" aria-label="Search third location" placeholder="Search next destination" aria-controls="results-third"/><div id="results-third" class="endpoint-results" aria-live="polite"></div><select id="third" hidden></select><button id="pick-third" hidden></button><button id="remove-stop" class="add-stop" type="button">Remove stop</button></span></div></div><div class="journey-actions"><button id="use-current-start" class="current-start" type="button">Use current location</button><button id="add-stop" class="add-stop" type="button" aria-expanded="false" aria-controls="third-stop">+ Add stop</button></div>
+<div class="area-scope"><label for="area-radius">Area around map center</label><select id="area-radius" aria-label="Map loading radius"><option value="1" selected>1 mile</option><option value="2">2 miles</option><option value="3">3 miles</option><option value="4">4 miles</option><option value="5">5 miles</option></select></div><p class="campus-scope">Pan anywhere, then choose Live map or Load this area to search restaurants, cafes, shops, and buildings by name.</p><div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("origin")}</button><span class="field"><input id="search-start" class="endpoint-search" type="search" autocomplete="off" aria-label="Search starting point" placeholder="Search starting point" aria-controls="results-start"/><div id="results-start" class="endpoint-results" aria-live="polite"></div><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-end" class="endpoint-search" type="search" autocomplete="off" aria-label="Search destination" placeholder="Search destination" aria-controls="results-end"/><div id="results-end" class="endpoint-results" aria-live="polite"></div><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div><div id="third-stop" class="place-label" hidden><button id="drop-third" class="pin-picker" type="button" aria-label="Choose third location on map" aria-pressed="false">${icon("pin")}</button><span class="field"><input id="search-third" class="endpoint-search" type="search" autocomplete="off" aria-label="Search third location" placeholder="Search next destination" aria-controls="results-third"/><div id="results-third" class="endpoint-results" aria-live="polite"></div><select id="third" hidden></select><button id="pick-third" hidden></button><button id="remove-stop" class="add-stop" type="button">Remove stop</button></span></div></div><div class="journey-actions"><button id="use-current-start" class="current-start" type="button">Use current location</button><button id="add-stop" class="add-stop" type="button" aria-expanded="false" aria-controls="third-stop">+ Add stop</button></div>
 <div class="time-card"><div class="time-head"><div class="sun-disc">${icon("sun")}</div><div><span class="small-label">PLAN WITH THE SUN</span><h3>Shade moves. Your route can too.</h3></div><div class="time-value" id="time-value"></div></div><div class="time-controls"><label class="date-wrap"><span class="sr-only">Departure date</span><input id="date" type="date" value="${dateValue}"/></label><input id="time" type="range" min="0" max="1439" step="1" value="${Math.round(clockHour * 60)}" aria-label="Departure time"/></div><div class="time-foot"><span id="timezone">Demo time · Miami (UTC−04:00)</span><span>12 AM <span class="time-separator">⸱</span> 11:59 PM</span></div><div class="time-presets" aria-label="Time of day"><button id="reset-time" type="button" title="Reset to your current local date and time" aria-label="Reset to current local date and time">Now</button><button data-hour="9">Morning</button><button data-hour="13">Midday</button><button data-hour="17">Evening</button></div><p id="sun-summary" aria-live="polite"></p></div>
 <div class="preference"><div><label for="detour">Room for a cooler walk</label><strong id="detour-label">+50% distance</strong></div><input id="detour" type="range" min="0" max="75" step="5" value="50"/><div class="range-labels"><span>More direct</span><span>More shade</span></div></div>
 <button id="find" class="primary">${icon("leaf")} Find my shady path ${icon("arrow")}</button>
@@ -668,6 +668,33 @@ let loadedPlaces = [];
 async function loadArea(centerOverride = null) {
   if (busy) return;
   busy = true;
+  modeUI(true);
+  // Remove illustrative content before showing the live loading state.
+  if (data.source === "demo") {
+    cancelPick();
+    data = parseOSM({elements: []}, centerOverride || map.getCenter());
+    loadedPlaces = [];
+    start = end = third = null;
+    pair = null;
+    navigating = false;
+    $("#navigation").hidden = true;
+    ++shadeVersion;
+    mergedShade = [];
+    scored = null;
+    scoredData = null;
+    baseLayer.clearLayers();
+    shadeLayer.clearLayers();
+    routeLayer.clearLayers();
+    markerLayer.clearLayers();
+    for (const which of ["start", "end", "third"]) {
+      $("#search-" + which).value = "";
+      $("#results-" + which).replaceChildren();
+    }
+    setOptions();
+    renderCards();
+    $("#map-location").textContent = "Live map · waiting for area data";
+    $("#data-note").textContent = "Live streets have not loaded yet. Retry loading or choose Explore demo.";
+  }
   $("#load-area").disabled = true;
   $("#load-area").textContent = "Loading walking paths…";
   setStatus(
@@ -684,8 +711,9 @@ async function loadArea(centerOverride = null) {
       throw Error(
         "No walkable paths found. Move to another neighborhood and try again.",
       );
+    const places = areaPlaces(raw);
     data = next;
-    loadedPlaces = areaPlaces(raw);
+    loadedPlaces = places;
     for (const which of ["start","end","third"]) { $("#search-"+which).value=""; $("#results-"+which).replaceChildren(); }
     start = null;
     end = null;
@@ -714,7 +742,6 @@ async function loadArea(centerOverride = null) {
   }
 }
 $("#live-mode").onclick = () => {
-  modeUI(true);
   loadArea();
 };
 $("#load-area").onclick = () => loadArea();
@@ -749,7 +776,7 @@ for (const which of ["start", "end", "third"]) {
     if (query.length < 2) return;
     timer = setTimeout(async () => {
       if (busy) { results.textContent = "Map is loading. Type again when it finishes."; return; }
-      if (data.source !== "live") {
+      if (data.source !== "live" || !data.edges.length) {
         results.textContent = "Loading nearby places…";
         const ok = await loadArea();
         if (request !== revision) return;
