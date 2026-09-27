@@ -1,6 +1,6 @@
 # Shaadiest Path 🌿
 
-A ShellHacks ’26 walking-route prototype that trades a little distance for less sun. Created as its own project at `Shellhacks26/ShaadiestPath`, alongside `MinusOne`.
+A ShellHacks ’26 walking-route prototype that trades a little distance for less sun. Created as its own project at `Shellhacks26/ShaadiestPath`.
 
 ## Run
 
