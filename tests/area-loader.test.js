@@ -61,3 +61,19 @@ test("five-mile loading range converts miles to geographic bounds", async () => 
   assert.ok(Math.abs((bounds[2]-25)*111.32 - 8.04672) < 1e-8);
   assert.ok(Math.abs((bounds[3]+80)*111.32*Math.cos(25*Math.PI/180) - 8.04672) < 1e-8);
 });
+
+test("busy providers retry core map data without optional place search", async () => {
+ const queries=[];
+ const load=createAreaLoader({hosts:['one','two'],fetchImpl:async(host,options)=>{
+   const query=options.body.get('data'); queries.push(query);
+   return query.includes('node[name]') ? {ok:false} : {ok:true,json:async()=>({elements:[{type:'node',id:1}]})};
+ }});
+ const result=await load(25,-80,1);
+ assert.equal(result.searchLimited,true);
+ assert.equal(queries.length,3);
+ assert.ok(queries[2].includes('way[highway]'));
+ assert.ok(queries[2].includes('way[building]'));
+ assert.ok(queries[2].includes('node[natural=tree]'));
+ assert.ok(!queries[2].includes('nwr[amenity'));
+ assert.ok(!queries[2].includes('way[name]'));
+});

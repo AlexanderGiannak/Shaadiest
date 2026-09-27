@@ -816,7 +816,7 @@ async function loadArea(centerOverride = null, radiusOverride = null) {
     updateNote();
     calculate();
     choose("start");
-    setStatus(raw.stale ? "Using recently saved map data while providers are busy. Search nearby places or drop pins." : "Area loaded. Search nearby places or drop pins. Pan and load another area to explore farther.");
+    setStatus(raw.searchLimited ? "Walking paths and shade data loaded. Place search is limited while providers are busy; use the pin buttons to choose your route." : raw.stale ? "Using recently saved map data while providers are busy. Search nearby places or drop pins." : "Area loaded. Search nearby places or drop pins. Pan and load another area to explore farther.");
     return true;
   } catch (e) {
     setStatus(e.name === "TimeoutError" ? "Map loading timed out. Your current map is unchanged. Try a smaller area or retry." : e.message, true);
