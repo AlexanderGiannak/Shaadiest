@@ -1,3 +1,4 @@
+import { validLocationFix } from "./location.js";
 import { shadowPolygons } from "./shadow-geometry.js";
 import { coversPosition, areaForPositions } from "./coverage.js";
 import { formatDistance } from "./units.js";
@@ -602,7 +603,7 @@ function choose(which) {
   $("#drop-third").setAttribute("aria-pressed", which === "third");
   map.getContainer().style.cursor = "crosshair";
 }
-async function placePin(which, position, resolvedSnap = null) {
+async function placePin(which, position, resolvedSnap = null, minimumRadius = Number($("#area-radius").value)) {
   if (busy) {
     drawPins();
     return;
@@ -612,7 +613,7 @@ async function placePin(which, position, resolvedSnap = null) {
     const retained = Object.entries({start, end, third})
       .filter(([key,id]) => key !== which && id !== null)
       .map(([key,id]) => [key, unproject(data.nodes[id].point, data.origin)]);
-    const area = areaForPositions([position, ...retained.map(([,p]) => p)], Number($("#area-radius").value));
+    const area = areaForPositions([position, ...retained.map(([,p]) => p)], minimumRadius);
     if (!area) {
       setStatus("These pins span more than the supported map area. Choose closer points, or load a new area to start another walk.", true);
       drawPins();
@@ -893,6 +894,7 @@ for (const which of ["start", "end", "third"]) {
 }
 let locationWatch = null, locationSession = 0, latestFix = null, following = false;
 let positionMarker = null, accuracyCircle = null;
+let lastLocationRender = 0;
 const locationLayer = L.layerGroup().addTo(map);
 function locationIcon() {
   const heading = travelHeading(latestFix);
@@ -930,7 +932,7 @@ function updateWalkingStatus(message) {
 function stopTracking(message) {
   ++locationSession;
   if (locationWatch !== null) navigator.geolocation.clearWatch(locationWatch);
-  locationWatch = null; latestFix = null; following = false;
+  locationWatch = null; latestFix = null; following = false; lastLocationRender = 0;
   locationLayer.clearLayers(); positionMarker = accuracyCircle = null;
   $("#locate").setAttribute("aria-pressed","false");
   $("#locate").setAttribute("aria-label","Start location tracking");
@@ -941,7 +943,7 @@ function stopTracking(message) {
 map.on("dragstart", () => { following = false; });
 $("#follow-location").onclick = () => {
   following = true;
-  if (latestFix) map.panTo([latestFix.coords.latitude, latestFix.coords.longitude]);
+  if (latestFix) map.panTo([latestFix.coords.latitude, latestFix.coords.longitude], {animate:false});
 };
 $("#locate").onclick = () => {
   if (locationWatch !== null) { stopTracking("Location tracking stopped."); return; }
@@ -955,16 +957,17 @@ $("#locate").onclick = () => {
   updateWalkingStatus("Finding your location… Allow location access to track your walk.");
   locationWatch = navigator.geolocation.watchPosition(position => {
     if (session !== locationSession) return;
+    if (!validLocationFix(position)) { updateWalkingStatus("Waiting for a valid GPS location…"); return; }
     if (latestFix && position.timestamp < latestFix.timestamp) return;
     const first = !latestFix;
     latestFix = position;
     const latlng = [position.coords.latitude, position.coords.longitude];
     if (!positionMarker) {
-      accuracyCircle = L.circle(latlng,{radius:position.coords.accuracy,color:"#2877df",weight:1,fillOpacity:0.08,interactive:false}).addTo(locationLayer);
+      accuracyCircle = L.circle(latlng,{radius:Math.min(position.coords.accuracy, 1000),color:"#2877df",weight:1,fillOpacity:0.08,interactive:false}).addTo(locationLayer);
       positionMarker = L.marker(latlng,{icon: locationIcon(), interactive:false, zIndexOffset:1000}).addTo(locationLayer);
     } else {
       positionMarker.setLatLng(latlng);
-      accuracyCircle.setLatLng(latlng).setRadius(position.coords.accuracy);
+      accuracyCircle.setLatLng(latlng).setRadius(Math.min(position.coords.accuracy, 1000));
     }
     if (following) {
       if (first) map.setView(latlng,17);
@@ -992,10 +995,11 @@ $("#use-current-start").onclick = async () => {
       ? latestFix
       : await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject,
         {enableHighAccuracy:true, maximumAge:0, timeout:15000}));
+    if (!validLocationFix(fix)) throw Error("Your device returned an invalid location. Try again or place the start on the map.");
     if (fix.coords.accuracy > 50) throw Error("Location is too approximate to set your start. Try again outdoors or place the start on the map.");
     if (busy || data.source !== "live") throw Error("The map area changed. Try using your location again after loading a Live map area.");
     const position = {lat:fix.coords.latitude,lng:fix.coords.longitude};
-    if (await placePin("start", position) && locationWatch === null) $("#locate").onclick();
+    if (await placePin("start", position, null, 1) && locationWatch === null) $("#locate").onclick();
   } catch (error) {
     setStatus(error.code === 1 ? "Location permission denied. Allow location access or choose your start on the map."
       : error.code === 2 || error.code === 3 ? "Could not get your location. Try again or choose your start on the map."
