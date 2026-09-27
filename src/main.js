@@ -1,3 +1,4 @@
+import { shadowPolygons } from "./shadow-geometry.js";
 import { coversPosition, areaForPositions } from "./coverage.js";
 import { formatDistance } from "./units.js";
 import { arrivalTime, mountWeather } from "./weather.js";
@@ -238,21 +239,58 @@ function drawBase() {
     }).addTo(baseLayer);
 
 }
-const shadeWorker = new Worker(new URL("./shade-worker.js", import.meta.url), { type: "module" });
+let shadeWorker = null;
+let shadeWorking = false;
+let pendingShade = null;
+let shadeFallback = false;
+try {
+  shadeWorker = new Worker(new URL("./shade-worker.js", import.meta.url), { type: "module" });
+} catch { /* Canvas fallback also works when workers are unavailable. */ }
 let shadeVersion = 0;
 let mergedShade = [];
 let scoredData = null;
 let scoredTime = null;
 let calculationTimer;
-shadeWorker.onmessage = ({ data: result }) => {
-  if (result.version !== shadeVersion) return;
-  if (result.error) {
-    setStatus("Could not render shadows. Try another departure time.", true);
-    return;
-  }
-  mergedShade = result.polygons;
+function fallbackShade() {
+  mergedShade = scored ? shadowPolygons(scored.shapes.polygons, scored.shapes.treeShadows) : [];
+  shadeFallback = true;
   drawShade();
-};
+}
+function requestShade(request) {
+  if (!shadeWorker) { fallbackShade(); return; }
+  if (shadeWorking) { pendingShade = request; return; }
+  shadeWorking = true;
+  try { shadeWorker.postMessage(request); }
+  catch { disableShadeWorker(); }
+}
+function disableShadeWorker() {
+  shadeWorker?.terminate();
+  shadeWorker = null;
+  shadeWorking = false;
+  pendingShade = null;
+  fallbackShade();
+}
+if (shadeWorker) {
+  shadeWorker.onmessage = ({ data: result }) => {
+    shadeWorking = false;
+    if (result.version === shadeVersion) {
+      if (result.error) fallbackShade();
+      else {
+        mergedShade = result.polygons;
+        shadeFallback = result.fallback;
+        drawShade();
+      }
+    }
+    // Rapid time-slider changes keep only the newest pending calculation.
+    if (pendingShade) {
+      const request = pendingShade;
+      pendingShade = null;
+      if (request.version === shadeVersion) requestShade(request);
+    }
+  };
+  shadeWorker.onerror = event => { event.preventDefault(); disableShadeWorker(); };
+  shadeWorker.onmessageerror = disableShadeWorker;
+}
 function scheduleCalculation() {
   clearTimeout(calculationTimer);
   calculationTimer = setTimeout(() => calculate(), 120);
@@ -261,10 +299,9 @@ function drawShade() {
   shadeLayer.clearLayers();
   if (!scored) return;
   if (showShade && !scored.shapes.night) {
-    for (const polygon of mergedShade) {
-      const rings = polygon.map((ring) => ring.map(ll));
-      // A soft perimeter around a uniform union, with courtyard holes retained.
-      L.polygon(rings, {
+    const polygons = mergedShade.map(polygon => polygon.map(ring => ring.map(ll)));
+    if (polygons.length) {
+      if (!shadeFallback) L.polygon(polygons, {
         pane: "shade",
         color: "#534b70",
         weight: 6,
@@ -272,11 +309,14 @@ function drawShade() {
         fill: false,
         interactive: false,
       }).addTo(shadeLayer);
-      L.polygon(rings, {
+      // Fill the entire MultiPolygon once: fallback overlaps must not become
+      // darker or cancel out; merged courtyard holes keep opposite winding.
+      L.polygon(polygons, {
         pane: "shade",
         stroke: false,
         fillColor: "#514864",
         fillOpacity: 0.34,
+        fillRule: "nonzero",
         interactive: false,
       }).addTo(shadeLayer);
     }
@@ -391,7 +431,7 @@ function calculate(fit = false) {
       const version = ++shadeVersion;
       mergedShade = [];
       drawShade();
-      shadeWorker.postMessage({ version, polygons: scored.shapes.polygons,
+      requestShade({ version, polygons: scored.shapes.polygons,
         treeShadows: scored.shapes.treeShadows });
     }
   }
