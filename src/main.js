@@ -1,3 +1,4 @@
+import { coversPosition, areaForPositions } from "./coverage.js";
 import { formatDistance } from "./units.js";
 import { arrivalTime, mountWeather } from "./weather.js";
 import { areaPlaces, searchPlaces, snapPlace } from "./campus.js";
@@ -561,15 +562,45 @@ function choose(which) {
   $("#drop-third").setAttribute("aria-pressed", which === "third");
   map.getContainer().style.cursor = "crosshair";
 }
-function placePin(which, position, resolvedSnap = null) {
+async function placePin(which, position, resolvedSnap = null) {
   if (busy) {
     drawPins();
     return;
   }
+  if (!resolvedSnap && data.source === "live" &&
+      (!data.edges.length || !coversPosition(data.coverage, position))) {
+    const retained = Object.entries({start, end, third})
+      .filter(([key,id]) => key !== which && id !== null)
+      .map(([key,id]) => [key, unproject(data.nodes[id].point, data.origin)]);
+    const area = areaForPositions([position, ...retained.map(([,p]) => p)], Number($("#area-radius").value));
+    if (!area) {
+      setStatus("These pins span more than the supported map area. Choose closer points, or load a new area to start another walk.", true);
+      drawPins();
+      return false;
+    }
+    if (!await loadArea(area.center, area.radius)) { drawPins(); return false; }
+    for (const [key, previous] of retained) {
+      const restored = snapToPath(data, project(previous, data.origin));
+      if (!restored) {
+        setStatus("The refreshed map could not restore your existing pin. Choose your start and destination again.", true);
+        calculate();
+        return false;
+      }
+      data = restored.data;
+      if (key === "start") start = restored.id;
+      else if (key === "end") end = restored.id;
+      else third = restored.id;
+      $("#search-" + key).value = "Dropped pin · " + restored.edge.name;
+    }
+  }
   const snap = resolvedSnap || snapToPath(data, project(position, data.origin));
   if (!snap) {
     setStatus(
-      "No walking path within 262 ft. Move closer to a mapped path.",
+      !data.edges.length
+        ? "Walking paths have not loaded. Choose Live map or Load this area and retry."
+        : snapToPath({...data, buildings: []}, project(position, data.origin))
+          ? "Nearby mapped paths cross a building footprint and cannot be used. Choose an outdoor path or entrance."
+          : "No eligible walking path within 262 ft in the loaded street data. Streets visible on the basemap may not allow walking.",
       true,
     );
     drawPins();
@@ -665,14 +696,12 @@ function modeUI(live) {
 }
 let loadedPlaces = [];
 
-async function loadArea(centerOverride = null) {
-  if (busy) return;
-  busy = true;
+function enterLiveMode(center) {
   modeUI(true);
   // Remove illustrative content before showing the live loading state.
   if (data.source === "demo") {
     cancelPick();
-    data = parseOSM({elements: []}, centerOverride || map.getCenter());
+    data = parseOSM({elements: []}, center);
     loadedPlaces = [];
     start = end = third = null;
     pair = null;
@@ -695,13 +724,19 @@ async function loadArea(centerOverride = null) {
     $("#map-location").textContent = "Live map · waiting for area data";
     $("#data-note").textContent = "Live streets have not loaded yet. Retry loading or choose Explore demo.";
   }
+}
+
+async function loadArea(centerOverride = null, radiusOverride = null) {
+  if (busy) return;
+  busy = true;
+  enterLiveMode(centerOverride || map.getCenter());
   $("#load-area").disabled = true;
   $("#load-area").textContent = "Loading walking paths…";
   setStatus(
     "Loading paths, trees and buildings. This can take up to a minute.",
   );
   const center = centerOverride || map.getCenter();
-  const radius = Number($("#area-radius").value);
+  const radius = radiusOverride ?? Number($("#area-radius").value);
   try {
     const r = await fetch(`/api/area?lat=${center.lat}&lng=${center.lng}&radius=${radius}`, {signal: AbortSignal.timeout(50000)});
     const raw = await r.json().catch(() => { throw Error("Map loading timed out. Your current map is unchanged. Try a smaller area or retry."); });
@@ -711,8 +746,10 @@ async function loadArea(centerOverride = null) {
       throw Error(
         "No walkable paths found. Move to another neighborhood and try again.",
       );
+    next.coverage = {center: {lat: center.lat, lng: center.lng}, radius};
     const places = areaPlaces(raw);
     data = next;
+    $("#area-radius").value = String(radius);
     loadedPlaces = places;
     for (const which of ["start","end","third"]) { $("#search-"+which).value=""; $("#results-"+which).replaceChildren(); }
     start = null;
@@ -796,11 +833,11 @@ for (const which of ["start", "end", "third"]) {
         detail.className = "place-result-detail";
         detail.textContent = [place.category, place.cuisine, place.address].filter(Boolean).join(" · ");
         button.append(detail);
-        button.onclick = () => {
+        button.onclick = async () => {
           if (busy || (which === "third" && !thirdEnabled)) return;
           const snapped = snapPlace(data, place);
           if (!snapped) { setStatus("Could not connect this place to a mapped walking path. Choose a nearby entrance on the map.",true); return; }
-          if (!placePin(which,place,snapped)) return;
+          if (!await placePin(which,place,snapped)) return;
           input.value = place.name;
           results.replaceChildren();
           map.panTo(unproject(data.nodes[which === "start" ? start : which === "end" ? end : third].point,data.origin));
@@ -893,7 +930,7 @@ $("#locate").onclick = () => {
       if (first) map.setView(latlng,17);
       else map.panTo(latlng,{animate:false});
     }
-    if (first && data.source !== "live") modeUI(true);
+    if (first && data.source !== "live") enterLiveMode({lat:position.coords.latitude, lng:position.coords.longitude});
     updateWalkingStatus();
   }, error => {
     if (session !== locationSession) return;
@@ -902,7 +939,7 @@ $("#locate").onclick = () => {
       updateWalkingStatus("GPS unavailable — waiting for a location update. You can stop tracking with the location button."); }
   }, {enableHighAccuracy:true,maximumAge:2000,timeout:15000});
 };
-// This action only matches against already loaded paths; it makes no area request.
+// Explicitly choosing the current location loads its walking area when needed.
 $("#use-current-start").onclick = async () => {
   if (busy) { setStatus("Wait for the area to finish loading, then use your location."); return; }
   if (data.source !== "live") { setStatus("Load a Live map area first, then use your current location as the start."); return; }
@@ -918,8 +955,7 @@ $("#use-current-start").onclick = async () => {
     if (fix.coords.accuracy > 50) throw Error("Location is too approximate to set your start. Try again outdoors or place the start on the map.");
     if (busy || data.source !== "live") throw Error("The map area changed. Try using your location again after loading a Live map area.");
     const position = {lat:fix.coords.latitude,lng:fix.coords.longitude};
-    if (!snapToPath(data, project(position, data.origin))) throw Error("No walking path within 262 ft of your location in the loaded area. Load your area first or choose a start on the map.");
-    if (placePin("start", position) && locationWatch === null) $("#locate").onclick();
+    if (await placePin("start", position) && locationWatch === null) $("#locate").onclick();
   } catch (error) {
     setStatus(error.code === 1 ? "Location permission denied. Allow location access or choose your start on the map."
       : error.code === 2 || error.code === 3 ? "Could not get your location. Try again or choose your start on the map."
