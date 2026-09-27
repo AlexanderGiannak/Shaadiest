@@ -159,46 +159,90 @@ export function crossesBuilding(a, b, polygon) {
   }
   return false;
 }
-const buildingAccessCache = new WeakMap();
+const bounds = (points) =>
+  points.reduce(
+    (box, p) => [
+      Math.min(box[0], p[0]), Math.min(box[1], p[1]),
+      Math.max(box[2], p[0]), Math.max(box[3], p[1]),
+    ],
+    [Infinity, Infinity, -Infinity, -Infinity],
+  );
+const overlaps = (p, q) => p[0] <= q[2] && p[2] >= q[0] && p[1] <= q[3] && p[3] >= q[1];
+// Uniform grid of bounding boxes: a lookup only tests shapes in nearby cells
+// instead of every shadow on the map, which froze phones on each recalculation.
+function gridIndex(boxes, size = 40) {
+  const cells = new Map();
+  const each = (box, visit) => {
+    for (let x = Math.floor(box[0] / size); x <= Math.floor(box[2] / size); x++)
+      for (let y = Math.floor(box[1] / size); y <= Math.floor(box[3] / size); y++) visit(x + "," + y);
+  };
+  boxes.forEach((box, i) =>
+    each(box, (key) => (cells.has(key) ? cells.get(key).push(i) : cells.set(key, [i]))),
+  );
+  return (box) => {
+    const found = new Set();
+    each(box, (key) => {
+      for (const i of cells.get(key) || []) if (overlaps(boxes[i], box)) found.add(i);
+    });
+    return [...found].sort((a, b) => a - b);
+  };
+}
+// Cached per building set and per edge object, so a pin drop that splits one
+// edge does not re-test every other edge against every footprint.
+const buildingAccessCache = new WeakMap(),
+  noBuildings = [];
 function blockedEdges(data) {
-  if (buildingAccessCache.has(data)) return buildingAccessCache.get(data);
-  const footprints = (data.buildings || []).map(({ points }) => ({
-    points, minX: Math.min(...points.map(p => p[0])), maxX: Math.max(...points.map(p => p[0])),
-    minY: Math.min(...points.map(p => p[1])), maxY: Math.max(...points.map(p => p[1])),
-  }));
-  const blocked = new Set(data.edges.filter(edge => {
-    // Strict outdoor routing: even mapped passages cannot cross a footprint.
-    const a = data.nodes[edge.a].point, b = data.nodes[edge.b].point;
-    return footprints.some(f => f.minX <= Math.max(a[0], b[0]) && f.maxX >= Math.min(a[0], b[0]) &&
-      f.minY <= Math.max(a[1], b[1]) && f.maxY >= Math.min(a[1], b[1]) && crossesBuilding(a, b, f.points));
-  }));
-  buildingAccessCache.set(data, blocked);
-  return blocked;
+  const buildings = data.buildings || noBuildings;
+  let cache = buildingAccessCache.get(buildings);
+  if (!cache) {
+    const find = gridIndex(buildings.map(({ points }) => bounds(points)));
+    cache = { find, memo: new WeakMap() };
+    buildingAccessCache.set(buildings, cache);
+  }
+  return {
+    has(edge) {
+      if (cache.memo.has(edge)) return cache.memo.get(edge);
+      // Strict outdoor routing: even mapped passages cannot cross a footprint.
+      const a = data.nodes[edge.a].point, b = data.nodes[edge.b].point;
+      const hit = cache.find(bounds([a, b])).some((i) => crossesBuilding(a, b, buildings[i].points));
+      cache.memo.set(edge, hit);
+      return hit;
+    },
+  };
 }
 
-export function scoreGraph(data, date) {
-  const shapes = shadowShapes(data, date);
-  const bounds = polygon => polygon.reduce((box, p) => [
-    Math.min(box[0], p[0]), Math.min(box[1], p[1]),
-    Math.max(box[2], p[0]), Math.max(box[3], p[1]),
-  ], [Infinity, Infinity, -Infinity, -Infinity]);
-  const indexed = Object.fromEntries(["polygons", "treeShadows", "woods"].map(key =>
-    [key, shapes[key].map(polygon => ({polygon, box: bounds(polygon)}))]));
-  return {
-    shapes,
-    edges: data.edges.filter(e => !blockedEdges(data).has(e)).map(e => {
+export function scoreGraph(data, date, previous = null) {
+  const time = date.getTime();
+  // Same time and geometry (e.g. a pin drop): reuse every unchanged edge's shade.
+  const reuse =
+    previous?.time === time && previous.origin === data.origin &&
+    previous.buildings === data.buildings && previous.trees === data.trees &&
+    previous.woods === data.woods ? previous.memo : null;
+  const shapes = reuse ? previous.shapes : shadowShapes(data, date);
+  const blocked = blockedEdges(data);
+  let finders;
+  const nearby = (box) => {
+    finders ||= Object.fromEntries(["polygons", "treeShadows", "woods"].map((key) => {
+      const find = gridIndex(shapes[key].map(bounds));
+      return [key, (b) => find(b).map((i) => shapes[key][i])];
+    }));
+    return { ...shapes, polygons: finders.polygons(box), treeShadows: finders.treeShadows(box), woods: finders.woods(box) };
+  };
+  const memo = new WeakMap();
+  const edges = data.edges.filter((e) => !blocked.has(e)).map((e) => {
+    let scoredEdge = reuse?.get(e);
+    if (!scoredEdge) {
       const a = data.nodes[e.a].point, b = data.nodes[e.b].point;
-      const box = bounds([a, b]);
       // Reject distant shapes before the detailed five-meter sampling.
-      const nearby = shapes.night || e.covered ? shapes : {
-        ...shapes,
-        ...Object.fromEntries(Object.entries(indexed).map(([key, entries]) => [key,
-          entries.filter(({box: other}) => other[0] <= box[2] && other[2] >= box[0] &&
-            other[1] <= box[3] && other[3] >= box[1]).map(entry => entry.polygon),
-        ])),
-      };
-      return {...e, length: distance(a, b), shade: sampleShade(a, b, nearby, e.covered)};
-    }),
+      const local = shapes.night || e.covered ? shapes : nearby(bounds([a, b]));
+      scoredEdge = { ...e, length: distance(a, b), shade: sampleShade(a, b, local, e.covered) };
+    }
+    memo.set(e, scoredEdge);
+    return scoredEdge;
+  });
+  return {
+    shapes, edges, time, memo,
+    origin: data.origin, buildings: data.buildings, trees: data.trees, woods: data.woods,
   };
 }
 // Binary heap keeps Dijkstra responsive on real neighborhood networks.
@@ -236,12 +280,15 @@ class Heap {
     return this.a.length;
   }
 }
-export function shortestPath(nodes, edges, start, end, weight = 0) {
+function adjacency(nodes, edges) {
   const adj = nodes.map(() => []);
   edges.forEach((e) => {
     adj[e.a].push([e.b, e]);
     if (!e.oneway) adj[e.b].push([e.a, e]);
   });
+  return adj;
+}
+export function shortestPath(nodes, edges, start, end, weight = 0, adj = adjacency(nodes, edges)) {
   const costs = nodes.map(() => Infinity),
     prev = [],
     q = new Heap();
@@ -285,14 +332,15 @@ export function shortestPath(nodes, edges, start, end, weight = 0) {
 export function routes(data, scored, start, end, detour = 0.5) {
   if (start === end)
     throw new Error("Choose two different places for your walk.");
-  const shortest = shortestPath(data.nodes, scored.edges, start, end, 0);
+  const adj = adjacency(data.nodes, scored.edges);
+  const shortest = shortestPath(data.nodes, scored.edges, start, end, 0, adj);
   if (!shortest)
     throw new Error(
       "These points are not connected by mapped walking paths that avoid buildings. Try nearby points or load another area.",
     );
   const candidates = [shortest];
   for (const w of [0.5, 1, 2, 4, 8, 16, 32, 64, 128]) {
-    const r = shortestPath(data.nodes, scored.edges, start, end, w);
+    const r = shortestPath(data.nodes, scored.edges, start, end, w, adj);
     if (r && r.length <= shortest.length * (1 + detour) + 0.01)
       candidates.push(r);
   }
@@ -380,9 +428,10 @@ export function parseOSM(raw, center) {
     height: Math.max(3, Math.min(300, parseFloat(t.height) || parseFloat(t["building:levels"]) * 3 || 9)),
     estimated: !t.height,
   });
-  const getNode = (id) => {
+  // Ways from `out geom` carry coordinates inline; no separate node list needed.
+  const getNode = (id, inline) => {
     if (lookup.has(id)) return lookup.get(id);
-    const n = rawNodes.get(id);
+    const n = rawNodes.get(id) || inline;
     if (!n) return null;
     const i = nodes.length;
     lookup.set(id, i);
@@ -409,8 +458,8 @@ export function parseOSM(raw, center) {
     if (el.type !== "way") continue;
     if (walkable(t)) {
       for (let i = 1; i < el.nodes.length; i++) {
-        let a = getNode(el.nodes[i - 1]),
-          b = getNode(el.nodes[i]);
+        let a = getNode(el.nodes[i - 1], el.geometry?.[i - 1]),
+          b = getNode(el.nodes[i], el.geometry?.[i]);
         if (a === null || b === null || a === b) continue;
         if (t["oneway:foot"] === "-1") [a, b] = [b, a];
         edges.push({

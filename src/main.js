@@ -205,8 +205,10 @@ function drawBase() {
       fillOpacity: 0.8,
       interactive: false,
     }).addTo(baseLayer);
+  const manyTrees = data.trees.length > 300;
   for (const tree of data.trees) {
-    L.polygon(canopyOutline(tree).map(ll), {
+    // Fewer outline points and no trunk dots keep thousands of live trees smooth.
+    L.polygon(canopyOutline(tree).filter((_, i) => !manyTrees || i % 3 === 0).map(ll), {
       pane: "trees",
       color: "#447247",
       weight: 1.2,
@@ -214,7 +216,7 @@ function drawBase() {
       fillOpacity: 0.65,
       interactive: false,
     }).addTo(baseLayer);
-    L.circle(ll(tree.point), {
+    if (!manyTrees) L.circle(ll(tree.point), {
       pane: "trees",
       radius: 0.8,
       color: "#496140",
@@ -239,7 +241,18 @@ let mergedShade = [];
 let scoredData = null;
 let scoredTime = null;
 let calculationTimer;
+// Only the newest departure time matters: while a union runs, keep just the
+// latest request instead of queueing one per slider step.
+let shadeWorking = false, shadeJob = null;
+function postShade(job) {
+  if (shadeWorking) { shadeJob = job; return; }
+  shadeWorking = true;
+  shadeWorker.postMessage(job);
+}
+shadeWorker.onerror = () => { shadeWorking = false; };
 shadeWorker.onmessage = ({ data: result }) => {
+  shadeWorking = false;
+  if (shadeJob) { const job = shadeJob; shadeJob = null; postShade(job); }
   if (result.version !== shadeVersion) return;
   if (result.error) {
     setStatus("Could not render shadows. Try another departure time.", true);
@@ -250,7 +263,7 @@ shadeWorker.onmessage = ({ data: result }) => {
 };
 function scheduleCalculation() {
   clearTimeout(calculationTimer);
-  calculationTimer = setTimeout(() => calculate(), 120);
+  calculationTimer = setTimeout(() => calculate(), 180);
 }
 function drawShade() {
   shadeLayer.clearLayers();
@@ -375,14 +388,14 @@ function calculate(fit = false) {
   if (scoredData !== data || scoredTime !== time) {
     const geometryChanged = !scoredData || scoredData.buildings !== data.buildings ||
       scoredData.trees !== data.trees || scoredTime !== time;
-    scored = scoreGraph(data, new Date(time));
+    scored = scoreGraph(data, new Date(time), scored);
     scoredData = data;
     scoredTime = time;
     if (geometryChanged) {
       const version = ++shadeVersion;
       mergedShade = [];
       drawShade();
-      shadeWorker.postMessage({ version, polygons: scored.shapes.polygons,
+      postShade({ version, polygons: scored.shapes.polygons,
         treeShadows: scored.shapes.treeShadows });
     }
   }
@@ -552,7 +565,7 @@ function choose(which) {
   $("#drop-end").setAttribute("aria-pressed", which === "end");
   map.getContainer().style.cursor = "crosshair";
 }
-function placePin(which, position, resolvedSnap = null) {
+function placePin(which, position, resolvedSnap = null, fromSearch = false) {
   if (busy) {
     drawPins();
     return;
@@ -591,7 +604,7 @@ function placePin(which, position, resolvedSnap = null) {
     `Pin placed on ${snap.edge.name}${snap.distance >= 1 ? ` · snapped ${Math.round(snap.distance)} m to path` : ""}. Drag either pin to adjust.`,
   );
   if (which === "end") setSheetExpanded(true);
-  if (start !== null && end === null) choose("end");
+  if (!fromSearch && start !== null && end === null) choose("end");
   return true;
 }
 $("#pick-start").onclick = () => choose("start");
@@ -635,7 +648,20 @@ function modeUI(live) {
 }
 let loadedCampusPlaces = [];
 let campusLoaded = false;
-async function loadArea(centerOverride = null) {
+// FIU ships as a static snapshot (public/campus.json): instant, CDN-cached and
+// independent of the busy public map servers. Refresh: node scripts/campus-snapshot.js
+const nearCampus = (p) =>
+  Math.abs(p.lat - campusCenter.lat) < 0.003 && Math.abs(p.lng - campusCenter.lng) < 0.003;
+async function fetchArea(center) {
+  const url = center === campusCenter ? "/campus.json" : `/api/area?lat=${center.lat}&lng=${center.lng}`;
+  const r = await fetch(url, AbortSignal.timeout ? { signal: AbortSignal.timeout(60000) } : {});
+  // Timeouts from the host can be HTML, not JSON.
+  const raw = await r.json().catch(() => null);
+  if (!r.ok || !raw?.elements)
+    throw Error(raw?.error || "Live map data is busy right now. Your current map is unchanged. Retry shortly, or search FIU campus places.");
+  return raw;
+}
+async function loadArea(centerOverride = null, fromSearch = false) {
   if (busy) return;
   busy = true;
   $("#load-area").disabled = true;
@@ -643,11 +669,13 @@ async function loadArea(centerOverride = null) {
   setStatus(
     "Loading paths, trees and buildings. This can take up to a minute.",
   );
-  const center = centerOverride || map.getCenter();
+  const picked = centerOverride || map.getCenter();
+  // Rounded centers let the CDN reuse responses for nearby loads.
+  const center = nearCampus(picked)
+    ? campusCenter
+    : { lat: Number(picked.lat.toFixed(3)), lng: Number(picked.lng.toFixed(3)) };
   try {
-    const r = await fetch(`/api/area?lat=${center.lat}&lng=${center.lng}`);
-    const raw = await r.json();
-    if (!r.ok) throw Error(raw.error);
+    const raw = await fetchArea(center);
     const next = parseOSM(raw, center);
     if (!next.edges.length)
       throw Error(
@@ -655,7 +683,7 @@ async function loadArea(centerOverride = null) {
       );
     data = next;
     loadedCampusPlaces = campusPlaces(raw);
-    campusLoaded = Math.abs(center.lat-campusCenter.lat)<0.0001 && Math.abs(center.lng-campusCenter.lng)<0.0001;
+    campusLoaded = center === campusCenter;
     for (const which of ["start","end"]) { $("#search-"+which).value=""; $("#results-"+which).replaceChildren(); }
     start = null;
     end = null;
@@ -671,11 +699,18 @@ async function loadArea(centerOverride = null) {
     $("#map-location").textContent = "Live · OpenStreetMap";
     updateNote();
     calculate();
-    choose("start");
+    // Searching keeps the sheet open; collapsing it hid the results on phones.
+    if (!fromSearch) choose("start");
     setStatus("Area loaded. Search for your start and destination at FIU.");
     return true;
   } catch (e) {
-    setStatus(e.message, true);
+    modeUI(data.source === "live");
+    setStatus(
+      e.name === "TimeoutError" || e.name === "AbortError"
+        ? "Map loading timed out. Your current map is unchanged. Retry shortly, or search FIU campus places."
+        : e.message,
+      true,
+    );
   } finally {
     busy = false;
     $("#load-area").disabled = false;
@@ -719,7 +754,7 @@ for (const which of ["start", "end"]) {
       if (busy) { results.textContent = "Map is loading. Type again when it finishes."; return; }
       if (data.source !== "live" || !campusLoaded) {
         results.textContent = "Loading FIU campus places…";
-        const ok = await loadArea(campusCenter);
+        const ok = await loadArea(campusCenter, true);
         if (request !== revision) return;
         input.value = query;
         if (!ok) { results.textContent = "Campus data unavailable. Try searching again."; return; }
@@ -738,7 +773,7 @@ for (const which of ["start", "end"]) {
           if (busy) return;
           const snapped = snapCampusPlace(data, place);
           if (!snapped) { setStatus("Could not connect this place to a mapped walking path. Choose a nearby entrance on the map.",true); return; }
-          if (!placePin(which,place,snapped)) return;
+          if (!placePin(which,place,snapped,true)) return;
           input.value = place.name;
           results.replaceChildren();
           map.panTo(unproject(data.nodes[which === "start" ? start : end].point,data.origin));

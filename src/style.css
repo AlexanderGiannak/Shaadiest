@@ -1432,3 +1432,10 @@ dialog a {
 .endpoint-results:not(:empty) { border: 1px solid #d5dfd1; padding: 4px; }
 .endpoint-results button { display: block; width: 100%; min-height: 44px; padding: 10px; border-radius: 5px; text-align: left; background: #fff; }
 .endpoint-results button:hover, .endpoint-results button:focus-visible { background: #eef3e7; }
+
+@media (max-width: 800px) {
+  /* iOS zooms into inputs under 16px and leaves the page zoomed. */
+  .endpoint-search {
+    font-size: 16px;
+  }
+}
