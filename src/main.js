@@ -1,5 +1,6 @@
+import { campusCenter, campusPlaces, searchCampus } from "./campus.js";
+import { walkingProgress } from "./walking.js";
 import L from "leaflet";
-import polygonClipping from "polygon-clipping";
 import "leaflet/dist/leaflet.css";
 import "./style.css";
 import { demoData } from "./demo.js";
@@ -46,17 +47,16 @@ $("#app").innerHTML = `
 <header class="header"><a class="brand" href="/" aria-label="Shaadiest home"><span class="brandmark">${icon("leaf")}</span>shaadiest<span class="branddot">.</span></a><span class="header-note">A cooler way there.</span><div class="header-right"><span class="event">SHELLHACKS ’26</span><button class="text-button" id="about">How it works ${icon("info")}</button></div></header>
 <main class="workspace"><aside class="sidebar"><div class="eyebrow">MADE FOR THE WALK</div><h1>Take the<br/> <em>shady</em> route.</h1><p class="intro">A little more green. A lot less sun.</p>
 <div class="mode-switch" aria-label="Data source"><button id="demo-mode" class="active">Explore demo</button><button id="live-mode">Live map</button></div>
-<div id="search-box" hidden><form id="search-form"><label for="search">Find a neighborhood</label><div class="search-row"><input id="search" placeholder="e.g. FIU, Miami" minlength="3" required/><button class="square" aria-label="Search places">${icon("arrow")}</button></div></form><div id="search-results"></div></div>
-<div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("pin")}</button><span class="field"><span class="small-label">STARTING FROM</span><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="field-divider"></div><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><span class="small-label">HEADING TO</span><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div></div>
+<p class="campus-scope">Search FIU · Modesto A. Maidique campus</p><div class="journey"><div class="place-label"><button id="drop-start" class="pin-picker" type="button" aria-label="Choose starting point on map" title="Choose starting point on map" aria-pressed="false">${icon("pin")}</button><span class="field"><span class="small-label">STARTING FROM</span><input id="search-start" class="endpoint-search" type="search" autocomplete="off" aria-label="Search FIU starting point" placeholder="Search FIU starting point" aria-controls="results-start"/><div id="results-start" class="endpoint-results" aria-live="polite"></div><select id="start" aria-label="Starting point"></select><button id="pick-start" class="pick-label" hidden>Choose on map</button><button id="use-current-start" class="current-start" type="button">Use current location</button></span></div><button class="swap" id="swap" aria-label="Swap start and destination">${icon("swap")}</button><div class="field-divider"></div><div class="place-label"><button id="drop-end" class="pin-picker" type="button" aria-label="Choose destination on map" title="Choose destination on map" aria-pressed="false">${icon("pin")}</button><span class="field"><span class="small-label">HEADING TO</span><input id="search-end" class="endpoint-search" type="search" autocomplete="off" aria-label="Search FIU destination" placeholder="Search FIU destination" aria-controls="results-end"/><div id="results-end" class="endpoint-results" aria-live="polite"></div><select id="end" aria-label="Destination"></select><button id="pick-end" class="pick-label" hidden>Choose on map</button></span></div></div>
 <div class="time-card"><div class="time-head"><div class="sun-disc">${icon("sun")}</div><div><span class="small-label">PLAN WITH THE SUN</span><h3>Shade moves. Your route can too.</h3></div><div class="time-value" id="time-value"></div></div><div class="time-controls"><label class="date-wrap"><span class="sr-only">Departure date</span><input id="date" type="date" value="${dateValue}"/></label><input id="time" type="range" min="0" max="1439" step="1" value="${Math.round(clockHour * 60)}" aria-label="Departure time"/></div><div class="time-foot"><span id="timezone">Demo time · Miami (UTC−04:00)</span><span>12 AM <span class="time-separator">⸱</span> 11:59 PM</span></div><div class="time-presets" aria-label="Time of day"><button id="reset-time" type="button" title="Reset to your current local date and time" aria-label="Reset to current local date and time">Now</button><button data-hour="9">Morning</button><button data-hour="13">Midday</button><button data-hour="17">Evening</button></div><p id="sun-summary" aria-live="polite"></p></div>
 <div class="preference"><div><label for="detour">Room for a cooler walk</label><strong id="detour-label">+50% distance</strong></div><input id="detour" type="range" min="0" max="75" step="5" value="50"/><div class="range-labels"><span>More direct</span><span>More shade</span></div></div>
 <button id="find" class="primary">${icon("leaf")} Find my shady path ${icon("arrow")}</button>
-<div id="status" class="status" role="status" aria-live="polite"></div>
+<div class="walking-status" id="walking-status" role="status" hidden></div><div id="status" class="status" role="status" aria-live="polite"></div>
 <div class="results-heading"><h2>Your walking routes</h2><span>${icon("walk")} ON FOOT</span></div><div id="route-cards"></div><div class="nav-card" id="navigation" hidden></div>
 <div class="insight" id="insight"></div><div class="data-note">${icon("info")}<span id="data-note"></span></div>
 <footer class="sidebar-footer"><span>A WALK ON THE BRIGHT SIDE. SORT OF.</span><span>↗</span></footer></aside>
 <section class="map-shell" aria-label="Walking route map"><div id="map"></div><div class="map-top"><span class="location-pill">${icon("pin")}<span id="map-location">Miami · Campus demo</span><span class="live-dot"></span></span><button id="load-area" class="map-button" hidden>Load this area ${icon("arrow")}</button></div>
-<div class="pin-tools"><button id="cancel-drop" hidden>Cancel</button></div><div class="map-hint" id="map-hint" hidden></div><div class="map-controls"><button id="locate" aria-label="Go to my location" title="Go to my location">${icon("locate")}</button><button id="fit" aria-label="Fit route" title="Fit route">${icon("pin")}</button><button id="layers" aria-label="Toggle shade overlay" aria-pressed="true" title="Toggle shade overlay">${icon("layers")}</button></div>
+<div class="pin-tools"><button id="cancel-drop" hidden>Cancel</button></div><div class="map-controls"><button id="locate" aria-label="Start location tracking" title="Start location tracking" aria-pressed="false">${icon("locate")}</button><button id="follow-location" hidden aria-label="Follow my location" title="Follow my location">${icon("walk")}</button><button id="fit" aria-label="Fit route" title="Fit route">${icon("pin")}</button><button id="layers" aria-label="Toggle shade overlay" aria-pressed="true" title="Toggle shade overlay">${icon("layers")}</button></div>
 <div class="map-legend"><span><i class="legend-dot green"></i> Tree canopy</span><span><i class="legend-dot purple"></i> Cast shadow</span><span><i class="legend-line"></i> Shortest route</span></div>
 
 </section></main>
@@ -86,7 +86,7 @@ mobileStatus.className = "mobile-status";
 mobileStatus.setAttribute("role", "status");
 mobileStatus.hidden = true;
 mobileSearch.append(mobileStatus);
-const movableControls = [$("#search-box"), $(".mode-switch"), $(".time-card")].map(node => {
+const movableControls = [$(".mode-switch"), $(".time-card")].map(node => {
   const anchor = document.createComment("desktop control position");
   node.before(anchor);
   return { node, anchor };
@@ -179,7 +179,7 @@ function setOptions() {
       sel.append(o);
     }
     sel.value = which === "start" ? start : end;
-    sel.hidden = data.source !== "demo";
+    sel.hidden = true;
     $("#pick-" + which).hidden = data.source === "demo";
   }
 }
@@ -204,28 +204,58 @@ function drawBase() {
       fillOpacity: 0.8,
       interactive: false,
     }).addTo(baseLayer);
+  for (const tree of data.trees) {
+    L.polygon(canopyOutline(tree).map(ll), {
+      pane: "trees",
+      color: "#447247",
+      weight: 1.2,
+      fillColor: "#85b469",
+      fillOpacity: 0.65,
+      interactive: false,
+    }).addTo(baseLayer);
+    L.circle(ll(tree.point), {
+      pane: "trees",
+      radius: 0.8,
+      color: "#496140",
+      weight: 1,
+      fillOpacity: 1,
+      interactive: false,
+    }).addTo(baseLayer);
+  }
+  for (const polygon of data.woods || [])
+    L.polygon(polygon.map(ll), {
+      pane: "trees",
+      color: "#719655",
+      weight: 1,
+      fillOpacity: 0.3,
+      interactive: false,
+    }).addTo(baseLayer);
+
+}
+const shadeWorker = new Worker(new URL("./shade-worker.js", import.meta.url), { type: "module" });
+let shadeVersion = 0;
+let mergedShade = [];
+let scoredData = null;
+let scoredTime = null;
+let calculationTimer;
+shadeWorker.onmessage = ({ data: result }) => {
+  if (result.version !== shadeVersion) return;
+  if (result.error) {
+    setStatus("Could not render shadows. Try another departure time.", true);
+    return;
+  }
+  mergedShade = result.polygons;
+  drawShade();
+};
+function scheduleCalculation() {
+  clearTimeout(calculationTimer);
+  calculationTimer = setTimeout(() => calculate(), 120);
 }
 function drawShade() {
   shadeLayer.clearLayers();
   if (!scored) return;
   if (showShade && !scored.shapes.night) {
-    const shapes = [
-      ...scored.shapes.polygons,
-      ...scored.shapes.treeShadows,
-    ].filter(
-      (p) =>
-        p.length >= 3 &&
-        Math.abs(
-          p.reduce((s, a, i) => {
-            const b = p[(i + 1) % p.length];
-            return s + a[0] * b[1] - b[0] * a[1];
-          }, 0),
-        ) > 0.001,
-    );
-    const merged = shapes.length
-      ? polygonClipping.union(...shapes.map((p) => [[...p, p[0]]]))
-      : [];
-    for (const polygon of merged) {
+    for (const polygon of mergedShade) {
       const rings = polygon.map((ring) => ring.map(ll));
       // A soft perimeter around a uniform union, with courtyard holes retained.
       L.polygon(rings, {
@@ -245,32 +275,6 @@ function drawShade() {
       }).addTo(shadeLayer);
     }
   }
-  for (const tree of data.trees) {
-    L.polygon(canopyOutline(tree).map(ll), {
-      pane: "trees",
-      color: "#447247",
-      weight: 1.2,
-      fillColor: "#85b469",
-      fillOpacity: 0.65,
-      interactive: false,
-    }).addTo(shadeLayer);
-    L.circle(ll(tree.point), {
-      pane: "trees",
-      radius: 0.8,
-      color: "#496140",
-      weight: 1,
-      fillOpacity: 1,
-      interactive: false,
-    }).addTo(shadeLayer);
-  }
-  for (const polygon of data.woods || [])
-    L.polygon(polygon.map(ll), {
-      pane: "trees",
-      color: "#719655",
-      weight: 1,
-      fillOpacity: 0.3,
-      interactive: false,
-    }).addTo(shadeLayer);
   const elevation = Math.round((scored.shapes.sun.altitude * 180) / Math.PI);
   const bearing =
     ((scored.shapes.sun.azimuth * 180) / Math.PI + 180 + 360) % 360;
@@ -285,6 +289,7 @@ function drawShade() {
 const formatDistance = (m) =>
   m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
 function drawRoutes(fit = false) {
+  updateWalkingStatus();
   routeLayer.clearLayers();
   markerLayer.clearLayers();
   if (!pair) {
@@ -295,20 +300,21 @@ function drawRoutes(fit = false) {
     other = pair[selected === "shadiest" ? "shortest" : "shadiest"];
   L.polyline(
     other.path.map((i) => ll(data.nodes[i].point)),
-    { pane: "routes", color: "#fff", weight: 9, opacity: 0.85 },
+    { pane: "routes", smoothFactor: 0, color: "#fff", weight: 9, opacity: 0.85 },
   ).addTo(routeLayer);
   L.polyline(
     other.path.map((i) => ll(data.nodes[i].point)),
-    { pane: "routes", color: "#91978e", weight: 4, dashArray: "7 8" },
+    { pane: "routes", smoothFactor: 0, color: "#91978e", weight: 4, dashArray: "7 8" },
   ).addTo(routeLayer);
   L.polyline(
     chosen.path.map((i) => ll(data.nodes[i].point)),
-    { pane: "routes", color: "#fff", weight: 11, opacity: 1 },
+    { pane: "routes", smoothFactor: 0, color: "#fff", weight: 11, opacity: 1 },
   ).addTo(routeLayer);
   L.polyline(
     chosen.path.map((i) => ll(data.nodes[i].point)),
     {
       pane: "routes",
+      smoothFactor: 0,
       color: selected === "shadiest" ? "#21563d" : "#626e77",
       weight: 6,
       opacity: 1,
@@ -359,12 +365,26 @@ function updateNote() {
     `Time zone · ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
 }
 function calculate(fit = false) {
+  clearTimeout(calculationTimer);
   if (!$("#date").value) {
     setStatus("Choose a departure date.", true);
     return;
   }
-  scored = scoreGraph(data, date());
-  drawShade();
+  const time = date().getTime();
+  if (scoredData !== data || scoredTime !== time) {
+    const geometryChanged = !scoredData || scoredData.buildings !== data.buildings ||
+      scoredData.trees !== data.trees || scoredTime !== time;
+    scored = scoreGraph(data, new Date(time));
+    scoredData = data;
+    scoredTime = time;
+    if (geometryChanged) {
+      const version = ++shadeVersion;
+      mergedShade = [];
+      drawShade();
+      shadeWorker.postMessage({ version, polygons: scored.shapes.polygons,
+        treeShadows: scored.shapes.treeShadows });
+    }
+  }
   if (start === null || end === null) {
     pair = null;
     renderCards();
@@ -424,6 +444,7 @@ $("#end").onchange = (e) => {
 };
 $("#swap").onclick = () => {
   [start, end] = [end, start];
+  [$("#search-start").value,$("#search-end").value] = [$("#search-end").value,$("#search-start").value];
   setOptions();
   if (data.source === "live") {
     const a = $("#pick-start").textContent;
@@ -435,9 +456,10 @@ $("#swap").onclick = () => {
 $("#detour").oninput = (e) => {
   detour = Number(e.target.value) / 100;
   $("#detour-label").textContent = `+${e.target.value}% distance`;
-  calculate();
+  scheduleCalculation();
 };
-function setHour(value, fit = false) {
+$("#detour").onchange = () => calculate();
+function setHour(value, fit = false, deferred = false) {
   clockHour = Number(value);
   $("#time").value = Math.round(clockHour * 60);
   document
@@ -450,9 +472,11 @@ function setHour(value, fit = false) {
     );
   $("#time-value").innerHTML =
     `${Math.floor(clockHour) % 12 || 12}:${String(Math.round(clockHour * 60) % 60).padStart(2, "0")} <small>${clockHour >= 12 ? "PM" : "AM"}</small>`;
-  calculate(fit);
+  if (deferred) scheduleCalculation();
+  else calculate(fit);
 }
-$("#time").oninput = (e) => setHour(Number(e.target.value) / 60);
+$("#time").oninput = (e) => setHour(Number(e.target.value) / 60, false, true);
+$("#time").onchange = () => calculate();
 document
   .querySelectorAll("[data-hour]")
   .forEach((button) => (button.onclick = () => setHour(button.dataset.hour)));
@@ -513,7 +537,6 @@ function drawPins() {
 }
 function cancelPick() {
   pick = null;
-  $("#map-hint").hidden = true;
   $("#cancel-drop").hidden = true;
   $("#drop-start").setAttribute("aria-pressed", "false");
   $("#drop-end").setAttribute("aria-pressed", "false");
@@ -523,10 +546,7 @@ function cancelPick() {
 function choose(which) {
   if (mobileLayout.matches) setSheetExpanded(false);
   pick = which;
-  $("#map-hint").hidden = false;
   $("#cancel-drop").hidden = false;
-  $("#map-hint").textContent =
-    `Click to drop ${which === "start" ? "start" : "destination"} · snaps to nearest walking path · Esc to cancel`;
   $("#drop-start").setAttribute("aria-pressed", which === "start");
   $("#drop-end").setAttribute("aria-pressed", which === "end");
   map.getContainer().style.cursor = "crosshair";
@@ -554,6 +574,8 @@ function placePin(which, position) {
     return;
   }
   data = snap.data;
+  $("#search-"+which).value = "Dropped pin · " + snap.edge.name;
+  $("#results-"+which).replaceChildren();
   if (which === "start") start = snap.id;
   else end = snap.id;
   if (data.source === "demo" && !data.places.some((p) => p.id === snap.id))
@@ -569,6 +591,7 @@ function placePin(which, position) {
   );
   if (which === "end") setSheetExpanded(true);
   if (start !== null && end === null) choose("end");
+  return true;
 }
 $("#pick-start").onclick = () => choose("start");
 $("#pick-end").onclick = () => choose("end");
@@ -606,10 +629,12 @@ map.on("click", (e) => {
 function modeUI(live) {
   $("#live-mode").classList.toggle("active", live);
   $("#demo-mode").classList.toggle("active", !live);
-  $("#search-box").hidden = !live;
+
   $("#load-area").hidden = !live;
 }
-async function loadArea() {
+let loadedCampusPlaces = [];
+let campusLoaded = false;
+async function loadArea(centerOverride = null) {
   if (busy) return;
   busy = true;
   $("#load-area").disabled = true;
@@ -617,7 +642,7 @@ async function loadArea() {
   setStatus(
     "Loading paths, trees and buildings. This can take up to a minute.",
   );
-  const center = map.getCenter();
+  const center = centerOverride || map.getCenter();
   try {
     const r = await fetch(`/api/area?lat=${center.lat}&lng=${center.lng}`);
     const raw = await r.json();
@@ -628,6 +653,9 @@ async function loadArea() {
         "No walkable paths found. Move to another neighborhood and try again.",
       );
     data = next;
+    loadedCampusPlaces = campusPlaces(raw);
+    campusLoaded = Math.abs(center.lat-campusCenter.lat)<0.0001 && Math.abs(center.lng-campusCenter.lng)<0.0001;
+    for (const which of ["start","end"]) { $("#search-"+which).value=""; $("#results-"+which).replaceChildren(); }
     start = null;
     end = null;
     pair = null;
@@ -643,7 +671,8 @@ async function loadArea() {
     updateNote();
     calculate();
     choose("start");
-    setStatus("Area loaded. Pick two points on mapped walking paths.");
+    setStatus("Area loaded. Search for your start and destination at FIU.");
+    return true;
   } catch (e) {
     setStatus(e.message, true);
   } finally {
@@ -656,7 +685,7 @@ $("#live-mode").onclick = () => {
   modeUI(true);
   loadArea();
 };
-$("#load-area").onclick = loadArea;
+$("#load-area").onclick = () => loadArea();
 $("#demo-mode").onclick = () => {
   if (busy) {
     setStatus("Wait for the current map to finish loading.");
@@ -664,10 +693,10 @@ $("#demo-mode").onclick = () => {
   }
   modeUI(false);
   data = demoData();
+  for (const which of ["start","end"]) { $("#search-"+which).value=""; $("#results-"+which).replaceChildren(); }
   start = 0;
   end = 48;
   cancelPick();
-  $("#map-hint").hidden = true;
   map.getContainer().style.cursor = "";
   navigating = false;
   $("#navigation").hidden = true;
@@ -677,67 +706,159 @@ $("#demo-mode").onclick = () => {
   drawBase();
   calculate(true);
 };
-$("#search-form").onsubmit = async (e) => {
-  e.preventDefault();
-  const button = $("#search-form button");
-  button.disabled = true;
-  setStatus("Finding places…");
-  $("#search-results").innerHTML = "";
-  try {
-    const r = await fetch(
-      "/api/search?q=" + encodeURIComponent($("#search").value),
-    );
-    const values = await r.json();
-    if (!r.ok) throw Error(values.error);
-    if (!values.length)
-      throw Error("No places found. Try a city or a more specific name.");
-    for (const p of values) {
-      const b = document.createElement("button");
-      b.textContent = p.display_name;
-      b.onclick = () => {
-        map.setView([Number(p.lat), Number(p.lon)], 16);
-        $("#search-results").innerHTML = "";
-        $("#map-location").textContent = p.display_name
-          .split(",")
-          .slice(0, 2)
-          .join(",");
-        if (mobileLayout.matches) {
-          modeUI(true);
-          loadArea();
-        }
-        setStatus("Place found. Select “Load this area” to get walking paths.");
-      };
-      $("#search-results").append(b);
-    }
-    setStatus();
-  } catch (e) {
-    setStatus(e.message, true);
-  } finally {
-    button.disabled = false;
+for (const which of ["start", "end"]) {
+  const input = $("#search-"+which), results = $("#results-"+which);
+  let timer, revision = 0;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const request = ++revision, query = input.value.trim();
+    results.replaceChildren();
+    if (query.length < 2) return;
+    timer = setTimeout(async () => {
+      if (busy) { results.textContent = "Map is loading. Type again when it finishes."; return; }
+      if (data.source !== "live" || !campusLoaded) {
+        results.textContent = "Loading FIU campus places…";
+        const ok = await loadArea(campusCenter);
+        if (request !== revision) return;
+        input.value = query;
+        if (!ok) { results.textContent = "Campus data unavailable. Try searching again."; return; }
+        modeUI(true);
+        map.setView(campusCenter,16);
+      }
+      if (request !== revision) return;
+      results.replaceChildren();
+      const matches = searchCampus(loadedCampusPlaces,query);
+      if (!matches.length) results.textContent = "No mapped FIU places found. Try another name or drop a pin.";
+      for (const place of matches) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = place.name;
+        button.onclick = () => {
+          if (busy) return;
+          const snapped = snapToPath(data, project(place,data.origin));
+          if (!snapped) { setStatus("No outdoor walking path near this place. Choose a nearby entrance on the map.",true); return; }
+          if (!placePin(which,place)) return;
+          input.value = place.name;
+          results.replaceChildren();
+          map.panTo(unproject(data.nodes[which === "start" ? start : end].point,data.origin));
+        };
+        results.append(button);
+      }
+    },250);
+  });
+  input.addEventListener("keydown", event => {
+    if (event.key === "Escape") { ++revision; clearTimeout(timer); results.replaceChildren(); }
+    if (event.key === "Enter") { event.preventDefault(); results.querySelector("button")?.focus(); }
+  });
+}
+let locationWatch = null, locationSession = 0, latestFix = null, following = false;
+let positionMarker = null, accuracyCircle = null;
+const locationLayer = L.layerGroup().addTo(map);
+function updateWalkingStatus(message) {
+  const box = $("#walking-status");
+  box.hidden = locationWatch === null && !message;
+  if (message) { box.textContent = message; return; }
+  if (!latestFix) { box.textContent = "Finding your location…"; return; }
+  const age = Date.now() - latestFix.timestamp;
+  const accuracy = Math.round(latestFix.coords.accuracy);
+  if (age > 20000) { box.textContent = "Location is stale — waiting for a fresh GPS update."; return; }
+  const label = "Live location · accuracy ±" + accuracy + " m";
+  if (accuracy > 35) { box.textContent = label + " · Waiting for a more accurate fix."; return; }
+  if (data.source !== "live" || !pair) { box.textContent = label + " · Load your area and choose a walking route."; return; }
+  const point = project({lat:latestFix.coords.latitude,lng:latestFix.coords.longitude}, data.origin);
+  const progress = walkingProgress(data.nodes,pair[selected],point);
+  if (!progress) { box.textContent = label; return; }
+  if (progress.offset > Math.max(25,accuracy)) {
+    box.textContent = label + " · Off route — return to the marked path. Route has not been recalculated.";
+  } else {
+    const destination = data.nodes[pair[selected].path.at(-1)].point;
+    const atDestination = Math.hypot(point[0]-destination[0],point[1]-destination[1]) <= 15 && progress.remaining <= 20;
+    box.textContent = atDestination ? "You are near your destination · " + label :
+      formatDistance(progress.remaining) + " remaining · about " + Math.max(1,Math.round(progress.remaining/80)) + " min · " + (progress.name || "Walking path") + " · accuracy ±" + accuracy + " m";
   }
+}
+function stopTracking(message) {
+  ++locationSession;
+  if (locationWatch !== null) navigator.geolocation.clearWatch(locationWatch);
+  locationWatch = null; latestFix = null; following = false;
+  locationLayer.clearLayers(); positionMarker = accuracyCircle = null;
+  $("#locate").setAttribute("aria-pressed","false");
+  $("#locate").setAttribute("aria-label","Start location tracking");
+  $("#locate").title = "Start location tracking";
+  $("#follow-location").hidden = true;
+  updateWalkingStatus(message);
+}
+map.on("dragstart", () => { following = false; });
+$("#follow-location").onclick = () => {
+  following = true;
+  if (latestFix) map.panTo([latestFix.coords.latitude, latestFix.coords.longitude]);
 };
 $("#locate").onclick = () => {
-  if (!navigator.geolocation) {
-    setStatus("Location is not supported in this browser.", true);
-    return;
-  }
-  setStatus("Finding your location…");
-  navigator.geolocation.getCurrentPosition(
-    (p) => {
-      map.setView([p.coords.latitude, p.coords.longitude], 16);
-      modeUI(true);
-      setStatus(
-        "Location found. Select “Load this area” to get walking paths.",
-      );
-    },
-    () =>
-      setStatus(
-        "Location unavailable. Search for a neighborhood or move the map instead.",
-        true,
-      ),
-    { timeout: 10000 },
-  );
+  if (locationWatch !== null) { stopTracking("Location tracking stopped."); return; }
+  if (!navigator.geolocation) { updateWalkingStatus("Location is not supported in this browser."); return; }
+  const session = ++locationSession;
+  following = true;
+  $("#locate").setAttribute("aria-pressed","true");
+  $("#locate").setAttribute("aria-label","Stop location tracking");
+  $("#locate").title = "Stop location tracking";
+  $("#follow-location").hidden = false;
+  updateWalkingStatus("Finding your location… Allow location access to track your walk.");
+  locationWatch = navigator.geolocation.watchPosition(position => {
+    if (session !== locationSession) return;
+    if (latestFix && position.timestamp < latestFix.timestamp) return;
+    const first = !latestFix;
+    latestFix = position;
+    const latlng = [position.coords.latitude, position.coords.longitude];
+    if (!positionMarker) {
+      accuracyCircle = L.circle(latlng,{radius:position.coords.accuracy,color:"#2877df",weight:1,fillOpacity:0.08,interactive:false}).addTo(locationLayer);
+      positionMarker = L.circleMarker(latlng,{pane:"markerPane",radius:8,color:"#fff",weight:3,fillColor:"#2877df",fillOpacity:1,interactive:false}).addTo(locationLayer);
+    } else {
+      positionMarker.setLatLng(latlng);
+      accuracyCircle.setLatLng(latlng).setRadius(position.coords.accuracy);
+    }
+    if (following) {
+      if (first) map.setView(latlng,17);
+      else map.panTo(latlng,{animate:false});
+    }
+    if (first && data.source !== "live") modeUI(true);
+    updateWalkingStatus();
+  }, error => {
+    if (session !== locationSession) return;
+    if (error.code === 1) stopTracking("Location permission denied. Enable it in your browser to track your walk.");
+    else { latestFix = null; locationLayer.clearLayers(); positionMarker = accuracyCircle = null;
+      updateWalkingStatus("GPS unavailable — waiting for a location update. You can stop tracking with the location button."); }
+  }, {enableHighAccuracy:true,maximumAge:2000,timeout:15000});
 };
+// This action only matches against already loaded paths; it makes no area request.
+$("#use-current-start").onclick = async () => {
+  if (busy) { setStatus("Wait for the area to finish loading, then use your location."); return; }
+  if (data.source !== "live") { setStatus("Load a Live map area first, then use your current location as the start."); return; }
+  if (!navigator.geolocation) { setStatus("Location is not supported in this browser.", true); return; }
+  const button = $("#use-current-start");
+  button.disabled = true;
+  button.textContent = "Finding location…";
+  try {
+    const fix = latestFix && Date.now() - latestFix.timestamp < 10000
+      ? latestFix
+      : await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject,
+        {enableHighAccuracy:true, maximumAge:0, timeout:15000}));
+    if (fix.coords.accuracy > 50) throw Error("Location is too approximate to set your start. Try again outdoors or place the start on the map.");
+    if (busy || data.source !== "live") throw Error("The map area changed. Try using your location again after loading a Live map area.");
+    const position = {lat:fix.coords.latitude,lng:fix.coords.longitude};
+    if (!snapToPath(data, project(position, data.origin))) throw Error("No walking path within 80 m of your location in the loaded area. Load your area first or choose a start on the map.");
+    placePin("start", position);
+  } catch (error) {
+    setStatus(error.code === 1 ? "Location permission denied. Allow location access or choose your start on the map."
+      : error.code === 2 || error.code === 3 ? "Could not get your location. Try again or choose your start on the map."
+      : error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Use current location";
+  }
+};
+setInterval(() => { if (locationWatch !== null && latestFix) updateWalkingStatus(); },5000);
+window.addEventListener("pagehide", () => stopTracking());
+
 setOptions();
 updateNote();
 drawBase();

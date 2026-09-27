@@ -1396,3 +1396,15 @@ dialog a {
 .pin-picker:hover { background: #dfead3; }
 .pin-picker[aria-pressed="true"] { background: #24583c; color: #fff; }
 .journey .field-divider { margin-left: 54px; }
+
+.walking-status { margin: 12px 0; padding: 12px 14px; border-radius: 12px; background: #eaf3ff; color: #17477d; font-size: 13px; line-height: 1.5; }
+.map-controls #locate[aria-pressed="true"] { background: #2877df; color: white; }
+
+.current-start { display: block; margin-top: 6px; padding: 6px 0; color: #24583c; background: transparent; font-size: 12px; text-align: left; text-decoration: underline; }
+.current-start:disabled { opacity: .6; cursor: wait; }
+
+.campus-scope { font-size: 12px; color: #52634f; margin: 12px 0; }
+.endpoint-search { width: 100%; min-width: 0; min-height: 44px; border: 1px solid #d5dfd1; border-radius: 8px; padding: 8px; background: white; font: inherit; font-size: 16px; }
+.endpoint-results { font-size: 12px; color: #52634f; }
+.endpoint-results button { display: block; width: 100%; padding: 12px 8px; text-align: left; background: #f0f5ed; border-bottom: 1px solid #d5dfd1; }
+.endpoint-results button:hover, .endpoint-results button:focus-visible { background: #ddebd5; }

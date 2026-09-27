@@ -128,6 +128,54 @@ export function sampleShade(a, b, shapes, covered = false) {
   }
   return shaded / n;
 }
+// Split at every wall intersection and inspect each open interval. Unlike
+// distance sampling, this also catches very narrow buildings and concave walls.
+export function crossesBuilding(a, b, polygon) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const cuts = [0, 1];
+  const cross = (x, y, u, v) => x * v - y * u;
+  for (let i = 0; i < polygon.length; i++) {
+    const p = polygon[i], q = polygon[(i + 1) % polygon.length];
+    const ex = q[0] - p[0], ey = q[1] - p[1];
+    const denominator = cross(dx, dy, ex, ey);
+    if (Math.abs(denominator) < 1e-10) continue;
+    const t = cross(p[0] - a[0], p[1] - a[1], ex, ey) / denominator;
+    const u = cross(p[0] - a[0], p[1] - a[1], dx, dy) / denominator;
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) cuts.push(t);
+  }
+  cuts.sort((x, y) => x - y);
+  for (let i = 1; i < cuts.length; i++) {
+    if (cuts[i] - cuts[i - 1] < 1e-10) continue;
+    const t = (cuts[i] + cuts[i - 1]) / 2;
+    const p = [a[0] + dx * t, a[1] + dy * t];
+    const onWall = polygon.some((v, j) => {
+      const w = polygon[(j + 1) % polygon.length];
+      const length = distance(v, w);
+      return length > 0 && Math.abs(cross(w[0] - v[0], w[1] - v[1], p[0] - v[0], p[1] - v[1])) / length < 1e-7 &&
+        p[0] >= Math.min(v[0], w[0]) - 1e-7 && p[0] <= Math.max(v[0], w[0]) + 1e-7 &&
+        p[1] >= Math.min(v[1], w[1]) - 1e-7 && p[1] <= Math.max(v[1], w[1]) + 1e-7;
+    });
+    if (!onWall && inside(p, polygon)) return true;
+  }
+  return false;
+}
+const buildingAccessCache = new WeakMap();
+function blockedEdges(data) {
+  if (buildingAccessCache.has(data)) return buildingAccessCache.get(data);
+  const footprints = (data.buildings || []).map(({ points }) => ({
+    points, minX: Math.min(...points.map(p => p[0])), maxX: Math.max(...points.map(p => p[0])),
+    minY: Math.min(...points.map(p => p[1])), maxY: Math.max(...points.map(p => p[1])),
+  }));
+  const blocked = new Set(data.edges.filter(edge => {
+    // Strict outdoor routing: even mapped passages cannot cross a footprint.
+    const a = data.nodes[edge.a].point, b = data.nodes[edge.b].point;
+    return footprints.some(f => f.minX <= Math.max(a[0], b[0]) && f.maxX >= Math.min(a[0], b[0]) &&
+      f.minY <= Math.max(a[1], b[1]) && f.maxY >= Math.min(a[1], b[1]) && crossesBuilding(a, b, f.points));
+  }));
+  buildingAccessCache.set(data, blocked);
+  return blocked;
+}
+
 export function scoreGraph(data, date) {
   const shapes = shadowShapes(data, date);
   const bounds = polygon => polygon.reduce((box, p) => [
@@ -138,7 +186,7 @@ export function scoreGraph(data, date) {
     [key, shapes[key].map(polygon => ({polygon, box: bounds(polygon)}))]));
   return {
     shapes,
-    edges: data.edges.map(e => {
+    edges: data.edges.filter(e => !blockedEdges(data).has(e)).map(e => {
       const a = data.nodes[e.a].point, b = data.nodes[e.b].point;
       const box = bounds([a, b]);
       // Reject distant shapes before the detailed five-meter sampling.
@@ -240,7 +288,7 @@ export function routes(data, scored, start, end, detour = 0.5) {
   const shortest = shortestPath(data.nodes, scored.edges, start, end, 0);
   if (!shortest)
     throw new Error(
-      "These points are not connected by mapped walking paths. Try closer points or load a larger area.",
+      "These points are not connected by mapped walking paths that avoid buildings. Try nearby points or load another area.",
     );
   const candidates = [shortest];
   for (const w of [0.5, 1, 2, 4, 8, 16, 32, 64, 128]) {
@@ -283,8 +331,35 @@ export function walkable(t = {}) {
     (explicit ||
       (!["no", "private"].includes(t.access) &&
         !["cycleway", "bridleway"].includes(t.highway))) &&
+    t.indoor !== "yes" &&
+    t.highway !== "corridor" &&
     t.area !== "yes"
   );
+}
+// OSM multipolygon outlines can be split across reversed member ways.
+function buildingRings(relation, ways, nodes) {
+  const same = (a, b) => a.lat === b.lat && a.lon === b.lon;
+  const parts = relation.members.filter(m => m.type === "way" && (!m.role || m.role === "outer")).map(m => {
+    const way = ways.get(m.ref);
+    const geometry = m.geometry || way?.geometry || way?.nodes?.map(id => nodes.get(id));
+    if (!geometry || geometry.length < 2 || geometry.some(p => !p || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)))
+      throw Error("Incomplete building footprints. Reload this area before routing.");
+    return [...geometry];
+  });
+  const rings = [];
+  while (parts.length) {
+    const ring = parts.pop();
+    while (!same(ring[0], ring.at(-1))) {
+      const i = parts.findIndex(part => same(ring.at(-1), part[0]) || same(ring.at(-1), part.at(-1)));
+      if (i < 0) throw Error("Incomplete building outline. Reload this area before routing.");
+      const next = parts.splice(i, 1)[0];
+      if (!same(ring.at(-1), next[0])) next.reverse();
+      ring.push(...next.slice(1));
+    }
+    if (ring.length >= 4) rings.push(ring);
+  }
+  if (!rings.length) throw Error("Missing building outline. Reload this area before routing.");
+  return rings;
 }
 export function parseOSM(raw, center) {
   // Overpass uses lon; Leaflet and our internal coordinates use lng.
@@ -298,6 +373,13 @@ export function parseOSM(raw, center) {
     rawNodes = new Map(
       raw.elements.filter((e) => e.type === "node").map((n) => [n.id, n]),
     );
+  const rawWays = new Map(raw.elements.filter(e => e.type === "way").map(e => [e.id, e]));
+  const isBuilding = t => (t.building && t.building !== "no") || (t["building:part"] && t["building:part"] !== "no");
+  const addBuilding = (geometry, t) => buildings.push({
+    points: geometry.map(projectOSM),
+    height: Math.max(3, Math.min(300, parseFloat(t.height) || parseFloat(t["building:levels"]) * 3 || 9)),
+    estimated: !t.height,
+  });
   const getNode = (id) => {
     if (lookup.has(id)) return lookup.get(id);
     const n = rawNodes.get(id);
@@ -320,6 +402,10 @@ export function parseOSM(raw, center) {
         height: Math.max(3, Math.min(50, parseFloat(t.height) || 10)),
       });
     }
+    if (el.type === "relation" && isBuilding(t)) {
+      // Conservatively block the entire outer envelope, including courtyards.
+      for (const ring of buildingRings(el, rawWays, rawNodes)) addBuilding(ring, t);
+    }
     if (el.type !== "way") continue;
     if (walkable(t)) {
       for (let i = 1; i < el.nodes.length; i++) {
@@ -338,7 +424,8 @@ export function parseOSM(raw, center) {
               pedestrian: "Pedestrian walkway",
             }[t.highway] ||
             "Unnamed " + t.highway,
-          covered: t.covered === "yes" || t.tunnel === "yes",
+          covered: t.covered === "yes" || ["yes", "building_passage"].includes(t.tunnel),
+          buildingPassage: ["yes", "building_passage"].includes(t.tunnel),
           oneway: ["yes", "-1"].includes(t["oneway:foot"]),
         });
       }
@@ -347,18 +434,7 @@ export function parseOSM(raw, center) {
       el.geometry || el.nodes?.map((id) => rawNodes.get(id)).filter(Boolean);
     if (!geometry || geometry.length < 3) continue;
     const points = geometry.map(projectOSM);
-    if (t.building && t.building !== "no")
-      buildings.push({
-        points,
-        height: Math.max(
-          3,
-          Math.min(
-            300,
-            parseFloat(t.height) || parseFloat(t["building:levels"]) * 3 || 9,
-          ),
-        ),
-        estimated: !t.height,
-      });
+    if (isBuilding(t)) addBuilding(geometry, t);
     if (t.natural === "wood" || t.landuse === "forest") woods.push(points);
   }
   return {
@@ -393,7 +469,9 @@ export function canopyOutline(tree) {
 }
 export function snapToPath(data, point, maxDistance = 80) {
   let best = null;
+  const blocked = blockedEdges(data);
   data.edges.forEach((edge, index) => {
+    if (blocked.has(edge)) return;
     const a = data.nodes[edge.a].point,
       b = data.nodes[edge.b].point;
     const dx = b[0] - a[0],

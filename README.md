@@ -27,9 +27,9 @@ Use `PORT=5188 npm run dev` to change the HTTP port. `OVERPASS_URL=https://your-
 2. Set a start and destination, then adjust the extra-distance budget. Select either route card to see that route on the map.
 3. Use Morning/Midday/Evening or the full-day slider and date to project building and tree shadows. The time toolbar occupies its own space above the map; it never covers the map. “Find my shady path” opens a route summary and grouped path directions.
 4. Switch to **Live map** to load roughly a 1.6 km square around the map center. Click the map and choose Set as start/destination, or use the Drop start/Drop destination toolbar. Drag either pin to adjust it. Pins snap to the closest point on a walking segment within 80 m; segments are split without changing access direction. Escape or Cancel exits placement mode. This works in both demo and live modes.
-5. Search for a neighborhood or use your location, then click **Load this area**. Search is submit-only and rate-limited, with cached responses. Geolocation happens only when you press its button and grant browser permission.
+5. Search for your starting point and destination using the two FIU campus search bars. Searches are limited to the Modesto A. Maidique campus search window and use mapped names, alternative names, and abbreviations. The first search loads campus data; selecting a result snaps to a valid outdoor path. Geolocation happens only when you press its button and grant browser permission.
 
-Live place search and map tiles require internet. OpenStreetMap's community Overpass servers can be slow or unavailable; failed loads show an explicit error and do not replace the current dataset. During development, Photon search was reachable but the Overpass endpoints refused or timed out from this environment. The live parsing and routing pipeline has fixture tests; a successful live street-data round trip has not yet been verified here.
+Initial campus place loading and map tiles require internet. OpenStreetMap's community Overpass servers can be slow or unavailable; failed loads show an explicit error and do not replace the current dataset. During development, the Overpass endpoints refused or timed out from this environment. The live parsing and routing pipeline has fixture tests; a successful live street-data round trip has not yet been verified here.
 
 ## How the routing works
 
@@ -43,7 +43,7 @@ Live place search and map tiles require internet. OpenStreetMap's community Over
 
 ## Important prototype limits
 
-Shade is an estimate based on mapped features, not a sensor reading or a claim about temperature. OSM has incomplete trees and heights; unmapped canopy is treated as unknown/unshaded. Building heights are assumed meters. Multipolygon buildings/forests, terrain, cloud cover, seasonal foliage, actual tree crown shape, separate road sidewalks, crossing rules, foot-access barriers, conditional access and changing shade during a walk are not fully modeled. A road's mapped pedestrian access is not an accessibility or crossing-safety guarantee. Directions describe path segments; this is not GPS-guided turn-by-turn navigation. The default campus is not a survey of FIU.
+Shade is an estimate based on mapped features, not a sensor reading or a claim about temperature. OSM has incomplete trees and heights; unmapped canopy is treated as unknown/unshaded. Building heights are assumed meters. Multipolygon forests, terrain, cloud cover, seasonal foliage, actual tree crown shape, separate road sidewalks, crossing rules, foot-access barriers, conditional access and changing shade during a walk are not fully modeled. A road's mapped pedestrian access is not an accessibility or crossing-safety guarantee. Directions describe path segments; this is not GPS-guided turn-by-turn navigation. The default campus is not a survey of FIU.
 
 ## Structure
 
@@ -51,9 +51,17 @@ Shade is an estimate based on mapped features, not a sensor reading or a claim a
 - `src/engine.js` — geometry, sun/shade model, OSM conversion and routing
 - `src/demo.js` — repeatable synthetic campus dataset
 - `src/style.css` — responsive layout and visual system
-- `server.js` — Vite/production serving, Photon search and Overpass proxy, bounded requests and memory cache
+- `server.js` — Vite/production serving, Overpass proxy, bounded requests and memory cache
 - `tests/engine.test.js` — algorithm and parsing regression tests
 
 ## Data and references
 
 [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) provide live map and geographic data under the ODbL. Basemap tiles come from OpenStreetMap. [Leaflet](https://leafletjs.com/reference.html) renders the map, [SunCalc](https://github.com/mourner/suncalc/tree/v1.9.0) supplies solar position, [Photon](https://github.com/komoot/photon) supplies place search and [Overpass](https://wiki.openstreetmap.org/wiki/Overpass_API) supplies walking paths, trees and buildings. No Google or Apple credentials or proprietary map data are used.
+
+### Building avoidance
+
+Live loading includes building ways, building parts, and building relations. Relation outer rings are joined across member ways; incomplete relation outlines reject the new area load. Routes and dropped pins reject edges crossing building interiors, including tagged tunnels and building passages. Indoor corridors are excluded. Relation courtyards are conservatively treated as blocked. Routing uses mapped outdoor alternatives and reports no connection when none exists; missing or inaccurate OSM footprints remain a limitation. Restart the server after query changes and reload the area to fetch the expanded building dataset.
+
+### Live walking location
+
+Press the location icon and allow browser location access to start tracking; press it again to stop. The blue dot shows position and the circle shows reported accuracy. Dragging the map pauses following; the walking icon resumes it. On a live route, the location panel estimates remaining route distance and reports off-route or stale GPS fixes. It does not automatically reroute. Tracking stays in this page and stops when you leave; GPS coordinates are not sent to the application server by tracking. Browser geolocation requires localhost or HTTPS.

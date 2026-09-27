@@ -6,61 +6,11 @@ const app = express();
 app.disable("x-powered-by");
 const port = Number(process.env.PORT) || 5186;
 const cache = new Map();
-let searchAt = 0,
-  searchPending = false,
-  areaPending = false;
+let areaPending = false;
 const agent = {
   "User-Agent": "ShaadiestPath-ShellHacks26/1.0 (local hackathon prototype)",
   Accept: "application/json",
 };
-app.get("/api/search", async (req, res) => {
-  const q = String(req.query.q || "").trim();
-  if (q.length < 3 || q.length > 150)
-    return res
-      .status(400)
-      .json({ error: "Enter a place name between 3 and 150 characters." });
-  const key = "q:" + q;
-  if (cache.has(key)) return res.json(cache.get(key));
-  if (searchPending || Date.now() - searchAt < 1100)
-    return res
-      .status(429)
-      .json({ error: "Please wait a moment before searching again." });
-  searchAt = Date.now();
-  searchPending = true;
-  try {
-    const url = new URL("https://photon.komoot.io/api/");
-    url.search = new URLSearchParams({ q, limit: "5" });
-    const r = await fetch(url, {
-      headers: agent,
-      signal: AbortSignal.timeout(12000),
-    });
-    if (!r.ok)
-      throw Error(
-        "Place search is unavailable. Move the map and load your area instead.",
-      );
-    const raw = await r.json();
-    const data = (raw.features || []).map((f) => ({
-      lat: f.geometry.coordinates[1],
-      lon: f.geometry.coordinates[0],
-      display_name: [
-        f.properties.name,
-        f.properties.street,
-        f.properties.city,
-        f.properties.state,
-        f.properties.country,
-      ]
-        .filter(Boolean)
-        .join(", "),
-    }));
-    if (cache.size > 100) cache.clear();
-    cache.set(key, data);
-    res.json(data);
-  } catch (e) {
-    res.status(502).json({ error: e.message });
-  } finally {
-    searchPending = false;
-  }
-});
 app.get("/api/area", async (req, res) => {
   const lat = Number(req.query.lat),
     lng = Number(req.query.lng);
@@ -82,7 +32,7 @@ app.get("/api/area", async (req, res) => {
   const dy = 0.0072,
     dx = dy / Math.cos((lat * Math.PI) / 180),
     bbox = `${lat - dy},${lng - dx},${lat + dy},${lng + dx}`;
-  const query = `[out:json][timeout:30];(way[highway][highway!~"^(motorway|motorway_link|trunk|trunk_link|construction|proposed)$"](${bbox});way[building](${bbox});node[natural=tree](${bbox});way[natural=wood](${bbox});way[landuse=forest](${bbox}););out body geom;>;out skel qt;`;
+  const query = `[out:json][timeout:30];(way[highway][highway!~"^(motorway|motorway_link|trunk|trunk_link|construction|proposed)$"](${bbox});way[building](${bbox});way["building:part"](${bbox});relation[building](${bbox});relation["building:part"](${bbox});nwr[name](${bbox});node[natural=tree](${bbox});way[natural=wood](${bbox});way[landuse=forest](${bbox}););out body geom;>;out skel qt;`;
   try {
     let data;
     for (const host of process.env.OVERPASS_URL

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { demoData } from "../src/demo.js";
 import {
+  crossesBuilding,
   routes,
   scoreGraph,
   shortestPath,
@@ -246,4 +247,82 @@ test("nearby-shape filtering preserves full shade sampling", () => {
       assert.equal(edge.shade, sampleShade(data.nodes[edge.a].point, data.nodes[edge.b].point, scored.shapes, edge.covered));
     }
   }
+});
+
+const footprint = [[4,-1],[6,-1],[6,1],[4,1],[4,-1]];
+test("building collisions include thin footprints and interior endpoints but allow wall contact", () => {
+  assert.equal(crossesBuilding([0,0],[10,0],footprint),true);
+  assert.equal(crossesBuilding([5,0],[10,0],footprint),true);
+  assert.equal(crossesBuilding([4.5,0],[5.5,0],footprint),true);
+  assert.equal(crossesBuilding([0,-1],[10,-1],footprint),false);
+  assert.equal(crossesBuilding([0,0],[4,-1],footprint),false);
+  assert.equal(crossesBuilding([0,0],[10,0],[[4.01,-1],[4.02,-1],[4.02,1],[4.01,1]]),true);
+  const concave=[[0,0],[4,0],[4,1],[1,1],[1,4],[0,4]];
+  assert.equal(crossesBuilding([2,2],[3,3],concave),false);
+  assert.equal(crossesBuilding([-1,2],[3,2],concave),true);
+});
+test("both route choices and pin snapping avoid buildings, including at night", () => {
+  const d={origin:{lat:25.756,lng:-80.374},trees:[],buildings:[{points:footprint,height:9}],
+    nodes:[[0,0],[10,0],[0,3],[10,3]].map(point=>({point})),
+    edges:[{a:0,b:1},{a:0,b:2},{a:2,b:3},{a:3,b:1}]};
+  for(const when of [date,new Date('2026-09-26T01:00:00-04:00')]) {
+    const scored=scoreGraph(d,when);assert.equal(scored.edges.length,3);
+    const pair=routes(d,scored,0,1);
+    assert.deepEqual(pair.shortest.path,[0,2,3,1]);
+    assert.deepEqual(pair.shadiest.path,[0,2,3,1]);
+  }
+  assert.equal(snapToPath(d,[5,0],1),null);
+  const passage={...d,edges:[{a:0,b:1,buildingPassage:true,covered:true}]};
+  assert.equal(scoreGraph(passage,date).edges.length,0);
+  const roofOnly={...d,edges:[{a:0,b:1,covered:true}]};
+  assert.equal(scoreGraph(roofOnly,date).edges.length,0);
+});
+
+
+test("building avoidance never invents a detour or reverses a one-way path", () => {
+  const d = {
+    origin: {lat:25.756, lng:-80.374}, trees: [],
+    buildings: [{points:footprint,height:9}],
+    nodes: [[0,0],[10,0],[0,3],[10,3]].map(point=>({point})),
+    edges: [{a:0,b:1},{a:0,b:2,oneway:true},{a:2,b:3,oneway:true},{a:3,b:1,oneway:true}],
+  };
+  const scored = scoreGraph(d,date);
+  assert.deepEqual(routes(d,scored,0,1,0).shortest.path,[0,2,3,1]);
+  assert.throws(()=>routes(d,scored,1,0),/avoid buildings/);
+  const isolated = {...d,edges:[d.edges[0]]};
+  assert.throws(()=>routes(isolated,scoreGraph(isolated,date),0,1),/avoid buildings/);
+  const snapped = snapToPath(d,[5,2]);
+  assert.deepEqual(snapped.point,[5,3]);
+  for (const edge of scoreGraph(snapped.data,date).edges) {
+    assert.equal(crossesBuilding(snapped.data.nodes[edge.a].point,snapped.data.nodes[edge.b].point,footprint),false);
+  }
+});
+
+
+test("live relation buildings join reversed outer ways and block passages", () => {
+  const center={lat:25,lng:-80};
+  const geo=footprint.map(p=>{const q=unproject(p,center);return {lat:q.lat,lon:q.lng}});
+  const raw={elements:[
+    {type:"node",id:1,...(()=>{const p=unproject([0,0],center);return {lat:p.lat,lon:p.lng}})()},
+    {type:"node",id:2,...(()=>{const p=unproject([10,0],center);return {lat:p.lat,lon:p.lng}})()},
+    {type:"way",id:3,nodes:[1,2],tags:{highway:"footway",tunnel:"building_passage"}},
+    {type:"relation",id:4,tags:{type:"multipolygon",building:"yes"},members:[
+      {type:"way",ref:10,role:"outer",geometry:geo.slice(0,3)},
+      {type:"way",ref:11,role:"outer",geometry:geo.slice(2).reverse()},
+    ]},
+  ]};
+  const data=parseOSM(raw,center);
+  assert.equal(data.buildings.length,1);
+  assert.equal(scoreGraph(data,date).edges.length,0);
+  assert.equal(snapToPath(data,[5,0]),null);
+  raw.elements[3].members.pop();
+  assert.throws(()=>parseOSM(raw,center),/Incomplete building/);
+});
+
+test("building parts are obstacles and indoor corridors are excluded", () => {
+  const center={lat:25,lng:-80};
+  const data=parseOSM({elements:[{type:"way",id:1,tags:{"building:part":"yes"},geometry:footprint.map(p=>{const q=unproject(p,center);return {lat:q.lat,lon:q.lng}})}]},center);
+  assert.equal(data.buildings.length,1);
+  assert.equal(walkable({highway:"corridor"}),false);
+  assert.equal(walkable({highway:"footway",indoor:"yes"}),false);
 });
